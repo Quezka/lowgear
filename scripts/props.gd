@@ -10,6 +10,7 @@ const BROAD_AVG := Color(0.3, 0.42, 0.22)
 static var _cache: Dictionary = {}
 
 var near_dist := 160.0
+var anchors: Array = []  ## winch hook points
 
 
 # --- meshes (shared) -------------------------------------------------------------------
@@ -275,6 +276,7 @@ func build(t: Terrain, avoid: Array, quality := 1) -> void:
 		cs.shape = trunk_shape
 		cs.position = Vector3(x, h + 2.4, z)
 		trunks.add_child(cs)
+		anchors.append(Vector3(x, h + 1.0, z))
 		placed += 1
 	var cm := conifer_mesh()
 	var bm := broadleaf_mesh()
@@ -340,6 +342,7 @@ func _rocks(t: Terrain, rng: RandomNumberGenerator, avoid: Array) -> void:
 			cs.shape = sh
 			cs.position = Vector3(x, h, z)
 			rocks.add_child(cs)
+			anchors.append(Vector3(x, h + sy * 0.3, z))
 		placed += 1
 	for v in 3:
 		if not sets[v].is_empty():

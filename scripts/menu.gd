@@ -11,6 +11,8 @@ var _name_lbl: Label
 var _blurb: Label
 var _stats_box: VBoxContainer
 var _odo: Label
+var _tyre_btn: Button
+var _snorkel: CheckButton
 var _solo_btn: Button
 var _name_edit: LineEdit
 var _ip_edit: LineEdit
@@ -142,13 +144,13 @@ func _build_ui() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	v.add_child(row)
-	row.add_child(_small_button("<", _cycle.bind(-1)))
+	row.add_child(_small_button("chevron_left", _cycle.bind(-1)))
 	_name_lbl = Label.new()
 	_name_lbl.label_settings = GameState.label_settings(38, true)
 	_name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(_name_lbl)
-	row.add_child(_small_button(">", _cycle.bind(1)))
+	row.add_child(_small_button("chevron_right", _cycle.bind(1)))
 	_blurb = Label.new()
 	_blurb.label_settings = GameState.label_settings(23, true)
 	_blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -157,6 +159,22 @@ func _build_ui() -> void:
 	_stats_box = VBoxContainer.new()
 	_stats_box.add_theme_constant_override("separation", 6)
 	v.add_child(_stats_box)
+	var setup := HBoxContainer.new()
+	setup.add_theme_constant_override("separation", 10)
+	v.add_child(setup)
+	_tyre_btn = Button.new()
+	_tyre_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_tyre_btn.add_theme_font_size_override("font_size", 22)
+	_tyre_btn.pressed.connect(_cycle_tyres)
+	_tyre_btn.icon = Icons.tex("tire_repair", 64)
+	setup.add_child(_tyre_btn)
+	_snorkel = CheckButton.new()
+	_snorkel.text = "Snorkel"
+	_snorkel.add_theme_font_size_override("font_size", 22)
+	_snorkel.toggled.connect(func(on: bool) -> void:
+		GameState.set_garage(GameState.car_id, "snorkel", on)
+		_show_car())
+	setup.add_child(_snorkel)
 	_odo = Label.new()
 	_odo.label_settings = GameState.label_settings(21, true, GameState.MUTED)
 	_odo.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -191,6 +209,7 @@ func _build_ui() -> void:
 	name_row.add_child(_name_edit)
 	_solo_btn = Button.new()
 	_solo_btn.text = "Drive solo"
+	_solo_btn.icon = Icons.tex("play_arrow", 64)
 	_solo_btn.theme_type_variation = "PrimaryButton"
 	_solo_btn.custom_minimum_size = Vector2(0, 64)
 	_solo_btn.pressed.connect(_drive)
@@ -199,12 +218,14 @@ func _build_ui() -> void:
 	row2.add_theme_constant_override("separation", 10)
 	pv.add_child(row2)
 	var host_btn := Button.new()
-	host_btn.text = "Host game"
+	host_btn.text = "Host"
+	host_btn.icon = Icons.tex("wifi_tethering", 64)
 	host_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	host_btn.pressed.connect(_host)
 	row2.add_child(host_btn)
 	var set_btn := Button.new()
 	set_btn.text = "Settings"
+	set_btn.icon = Icons.tex("settings", 64)
 	set_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	set_btn.pressed.connect(func() -> void: _settings.visible = true)
 	row2.add_child(set_btn)
@@ -219,6 +240,7 @@ func _build_ui() -> void:
 	row3.add_child(_ip_edit)
 	var join_btn := Button.new()
 	join_btn.text = "Join"
+	join_btn.icon = Icons.tex("login", 64)
 	join_btn.pressed.connect(_join)
 	row3.add_child(join_btn)
 	_status = Label.new()
@@ -243,9 +265,16 @@ func _build_ui() -> void:
 	st.text = "Settings"
 	st.label_settings = GameState.label_settings(36, true)
 	sv.add_child(st)
-	sv.add_child(SettingsList.new())
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(460, clampf(get_viewport().get_visible_rect().size.y - 260.0, 220.0, 520.0))
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sv.add_child(scroll)
+	var sl := SettingsList.new()
+	sl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(sl)
 	var close := Button.new()
 	close.text = "Done"
+	close.icon = Icons.tex("close", 64)
 	close.pressed.connect(func() -> void:
 		_settings.visible = false
 		GameState.save_game()
@@ -254,9 +283,11 @@ func _build_ui() -> void:
 	_solo_btn.grab_focus.call_deferred()
 
 
-func _small_button(text: String, cb: Callable) -> Button:
+func _small_button(icon: String, cb: Callable) -> Button:
 	var b := Button.new()
-	b.text = text
+	b.icon = Icons.tex(icon, 64)
+	b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	b.add_theme_constant_override("icon_max_width", 36)
 	b.custom_minimum_size = Vector2(64, 56)
 	b.pressed.connect(cb)
 	return b
@@ -268,7 +299,13 @@ func _show_car() -> void:
 	GameState.car_id = id
 	if _car_vis:
 		_car_vis.queue_free()
-	_car_vis = CarBuilder.build_display(spec)
+	var garage := GameState.garage_for(id)
+	_car_vis = CarBuilder.build_display(spec, garage)
+	var span: float = float(spec["axles"][0]["z"]) - float(spec["axles"][-1]["z"])
+	_turntable.scale = Vector3.ONE * clampf(3.0 / (span + 1.0), 0.45, 1.0)
+	_tyre_btn.text = "Tyres: %s" % CarSpecs.TYRE_NAMES[garage["tyres"]]
+	_snorkel.visible = spec.has("snorkel_parts")
+	_snorkel.set_pressed_no_signal(bool(garage["snorkel"]))
 	_turntable.add_child(_car_vis)
 	_name_lbl.text = str(spec["name"])
 	_blurb.text = str(spec["blurb"])
@@ -291,11 +328,28 @@ func _show_car() -> void:
 			r.add_child(pip)
 		_stats_box.add_child(r)
 	var dt: Dictionary = spec["drivetrain"]
-	var gb := "%d-speed manual%s" % [(dt["gears"] as Array).size(), ", low range" if float(dt["low"]) > 0.0 else ""]
+	var gb := "%d-speed%s%s%s" % [(dt["gears"] as Array).size(), ", low range" if float(dt["low"]) > 0.0 else "",
+		", diff lock" if spec.get("diff_lock", false) else "", ", winch" if spec.get("winch", false) else ""]
 	var km := float(GameState.odometer.get(id, 0.0)) / 1000.0
 	_odo.text = "%s, %s\nDriven %.1f km     Coins %d     Viewpoints %d / 8" % [
-		"4x4" if spec["drive"] == "awd" else "front-wheel drive", gb, km,
+		"%s %dx%d" % [spec.get("class", ""), (spec["axles"] as Array).size() * 2, _driven(spec)], gb, km,
 		GameState.coins.size(), GameState.viewpoints.size()]
+
+
+static func _driven(spec: Dictionary) -> int:
+	var n := 0
+	for a in spec["axles"]:
+		if a["drive"]:
+			n += 2
+	return n
+
+
+func _cycle_tyres() -> void:
+	var id := GameState.car_id
+	var cur := str(GameState.garage_for(id)["tyres"])
+	var nxt: String = CarSpecs.TYRES[(CarSpecs.TYRES.find(cur) + 1) % CarSpecs.TYRES.size()]
+	GameState.set_garage(id, "tyres", nxt)
+	_show_car()
 
 
 func _cycle(dir: int) -> void:

@@ -4,6 +4,7 @@ render_mode cull_disabled;
 // Meadow is whatever the splat doesn't claim. Two scales per layer hide tiling.
 
 uniform sampler2D splat : filter_linear, repeat_disable;
+uniform sampler2D mud_map : filter_linear, repeat_disable;
 uniform sampler2DArray albedo_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2DArray normal_tex : filter_linear_mipmap, repeat_enable;
 uniform sampler2D macro : filter_linear, repeat_enable;
@@ -13,7 +14,7 @@ uniform bool use_normals = true;
 varying vec3 world_pos;
 
 const float TILE = 0.28;
-const float ROUGH[6] = float[](0.95, 0.9, 0.88, 0.82, 0.6, 0.95);
+const float ROUGH[7] = float[](0.95, 0.9, 0.88, 0.82, 0.6, 0.95, 0.35);
 
 void vertex() {
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -21,19 +22,24 @@ void vertex() {
 
 void fragment() {
 	vec4 s = texture(splat, (world_pos.xz + map_half) / (2.0 * map_half));
-	float w[6];
+	float w[7];
 	w[1] = s.r; w[2] = s.g; w[3] = s.b; w[4] = s.a;
 	float meadow = max(0.0, 1.0 - (s.r + s.g + s.b + s.a));
 	// Meadow is split between green grass and dirt patches by a large-scale noise.
 	float patches = smoothstep(0.56, 0.8, texture(macro, world_pos.xz * 0.0021 + vec2(0.5)).r);
 	w[0] = meadow * (1.0 - patches);
 	w[5] = meadow * patches;
+	float mud = smoothstep(0.08, 0.5, texture(mud_map, (world_pos.xz + map_half) / (2.0 * map_half)).r);
+	for (int i = 0; i < 6; i++) {
+		w[i] *= 1.0 - mud;
+	}
+	w[6] = mud;
 	vec2 uv = world_pos.xz * TILE;
 	vec2 uv2 = world_pos.xz * TILE * 0.23 + vec2(0.37, 0.11);
 	vec3 col = vec3(0.0);
 	vec3 nm = vec3(0.0);
 	float rough = 0.0;
-	for (int i = 0; i < 6; i++) {
+	for (int i = 0; i < 7; i++) {
 		if (w[i] > 0.004) {
 			vec3 a = mix(texture(albedo_tex, vec3(uv, float(i))).rgb, texture(albedo_tex, vec3(uv2, float(i))).rgb, 0.45);
 			col += a * w[i];
@@ -45,6 +51,7 @@ void fragment() {
 	}
 	float m = texture(macro, world_pos.xz * 0.004).r;
 	col *= mix(0.82, 1.12, m);
+	col *= mix(1.0, 0.62, mud);
 	ALBEDO = col;
 	ROUGHNESS = rough;
 	SPECULAR = 0.3;

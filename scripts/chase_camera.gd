@@ -72,8 +72,10 @@ func _process(delta: float) -> void:
 		look_at(car_pos + Vector3.UP * 0.8, Vector3.UP)
 		return
 
-	var dist := 7.0 if mode == 0 else 13.0
-	var height := 2.6 if mode == 0 else 5.0
+	var axles: Array = target.spec["axles"]
+	var size := maxf(1.0, (float(axles[0]["z"]) - float(axles[-1]["z"]) + 2.2) / 3.2)
+	var dist := (7.0 if mode == 0 else 13.0) * size
+	var height := (2.6 if mode == 0 else 5.0) * lerpf(1.0, size, 0.8)
 	var desired := car_pos - h * dist + Vector3.UP * height
 	var ground := terrain.get_height(desired.x, desired.z) + 1.2
 	desired.y = maxf(desired.y, maxf(ground, 0.6))

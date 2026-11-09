@@ -5,6 +5,7 @@ extends Node3D
 signal coin_collected(total: int)
 signal trail_completed
 signal discovered(lm_name: String, count: int)
+signal refuelling(ratio: float)
 
 const TRAILS := 30
 const PER_TRAIL := 5
@@ -33,6 +34,8 @@ const DEFS := [
 var terrain: Terrain
 var landmarks: Array = []  ## {id, name, color, pos, found, beacon}
 var total_coins := 0
+var stations: Array = []  ## [{pos, area}]
+var anchors: Array = []
 var _trail_left: Dictionary = {}
 var _coin_root: Node3D
 var _spinners: Array = []
@@ -46,6 +49,20 @@ func build(t: Terrain, spawn: Transform3D) -> void:
 	_rng.seed = 808
 	_place_landmarks(spawn.origin)
 	_place_coins(spawn)
+	var side := spawn.basis.x
+	_station(spawn.origin + side * 12.0 + spawn.basis.z * 4.0, spawn.basis)
+	var lms := landmarks.duplicate()
+	lms.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return (a["pos"] as Vector3).distance_to(spawn.origin) < (b["pos"] as Vector3).distance_to(spawn.origin))
+	for k in mini(2, lms.size()):
+		var lp: Vector3 = lms[k + 1 if lms.size() > 2 else k]["pos"]
+		var dir := (spawn.origin - lp)
+		dir.y = 0.0
+		var p := lp + dir.normalized() * 18.0
+		p.y = terrain.get_height(p.x, p.z)
+		_station(p, Basis(Vector3.UP, atan2(dir.x, dir.z)))
+	for l in landmarks:
+		anchors.append((l["pos"] as Vector3) + Vector3.UP * 1.5)
 
 
 func avoid_points() -> Array:
@@ -321,6 +338,58 @@ func _summit(r: Node3D, b: StaticBody3D) -> void:
 	_part(r, null, "sph", Vector3(0.65, 0.8, 0), Vector3(0, 3.8, 0), Color("#b8acc9"))
 	_part(r, null, "cyl", Vector3(0.05, 0.05, 3.0), Vector3(0.3, 5.4, 0), TRIM)
 	_part(r, null, "box", Vector3(1.2, 0.7, 0.04), Vector3(0.9, 6.5, 0), PINK)
+
+
+# --- fuel stations ----------------------------------------------------------------
+
+func _station(pos: Vector3, basis: Basis) -> void:
+	pos.y = terrain.get_height(pos.x, pos.z)
+	var root := Node3D.new()
+	root.position = pos - Vector3(0, 0.1, 0)
+	root.basis = basis
+	add_child(root)
+	var body := StaticBody3D.new()
+	body.collision_mask = 0
+	root.add_child(body)
+	_part(root, null, "box", Vector3(7.0, 0.3, 5.0), Vector3(0, 0.05, 0), Color("#c9c3ba"))
+	_part(root, body, "box", Vector3(0.8, 1.7, 0.6), Vector3(-2.6, 0.95, 0), Color("#e8707f"), Vector3.ZERO, true)
+	_part(root, null, "box", Vector3(0.6, 0.4, 0.05), Vector3(-2.6, 1.3, 0.31), Color("#fff3c4"), Vector3.ZERO, false, 0.4)
+	for x in [-3.2, 3.2]:
+		_part(root, body, "cyl", Vector3(0.12, 0.12, 4.2), Vector3(x, 2.1, -1.8), Color("#e8e4dc"), Vector3.ZERO, true)
+		_part(root, body, "cyl", Vector3(0.12, 0.12, 4.2), Vector3(x, 2.1, 1.8), Color("#e8e4dc"), Vector3.ZERO, true)
+	_part(root, null, "box", Vector3(7.4, 0.35, 4.6), Vector3(0, 4.3, 0), Color("#e8707f"))
+	var sign := Label3D.new()
+	sign.text = "FUEL"
+	sign.font_size = 160
+	sign.pixel_size = 0.006
+	sign.outline_size = 24
+	sign.modulate = Color("#fff8f0")
+	sign.outline_modulate = Color("#2b2d42")
+	sign.position = Vector3(0, 4.3, 2.35)
+	root.add_child(sign)
+	var area := Area3D.new()
+	area.collision_layer = 0
+	area.collision_mask = 2
+	var cs := CollisionShape3D.new()
+	var sh := CylinderShape3D.new()
+	sh.radius = 7.0
+	sh.height = 6.0
+	cs.shape = sh
+	area.add_child(cs)
+	root.add_child(area)
+	stations.append({"pos": pos, "area": area})
+	anchors.append(pos + basis * Vector3(3.2, 1.5, 1.8))
+
+
+func _physics_process(delta: float) -> void:
+	for s in stations:
+		for b in (s["area"] as Area3D).get_overlapping_bodies():
+			if b is Car and (b as Car).linear_velocity.length() < 2.0:
+				var car := b as Car
+				var fuelled := car.refuel(float(car.spec["fuel"]) * 0.12 * delta)
+				var fixed := car.repair(0.12 * delta)
+				if fuelled or fixed:
+					refuelling.emit(minf(car.fuel_ratio(), minf(car.engine_health, minf(car.body_health, car.worst_wheel()))))
 
 
 # --- coins -------------------------------------------------------------------

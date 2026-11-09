@@ -24,6 +24,10 @@ var _fade: ColorRect
 var _compass: Compass
 var _toast_t := 0.0
 var _hint_t := 16.0
+var _mud_tip_t := 0.0
+var _engine_lbl: Label
+var _wheels_lbl: Label
+var _body_lbl: Label
 
 
 func _ready() -> void:
@@ -37,18 +41,22 @@ func _ready() -> void:
 	var tl := _card(root)
 	tl.position = Vector2(20, 16)
 	var tlv := _vbox(tl)
-	_car_lbl = _text(tlv, 30)
-	_trip = _text(tlv, 22)
-	_surface = _text(tlv, 20, Color(CREAM, 0.75))
+	_car_lbl = _row(tlv, "local_shipping", 30)
+	_trip = _row(tlv, "speed", 22)
+	_surface = _row(tlv, "landscape", 20, Color(CREAM, 0.75))
+	var dmg := HBoxContainer.new()
+	dmg.add_theme_constant_override("separation", 6)
+	tlv.add_child(dmg)
+	_engine_lbl = _row(dmg, "oil_barrel", 20)
+	_wheels_lbl = _row(dmg, "tire_repair", 20)
+	_body_lbl = _row(dmg, "car_crash", 20)
 
 	# Top right: progress and players.
 	var tr := _card(root)
 	_anchor_right(tr, 16)
 	var trv := _vbox(tr)
-	_coins = _text(trv, 26)
-	_views = _text(trv, 26)
-	_coins.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_views.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_coins = _row(trv, "paid", 26, CREAM, Color("#f6bd60"))
+	_views = _row(trv, "landscape", 26, CREAM, Color("#8ecae6"))
 
 	_players_card = _card(root)
 	_anchor_right(_players_card, 118)
@@ -110,6 +118,7 @@ func _ready() -> void:
 	grid.add_theme_constant_override("v_separation", 2)
 	_hint_card.add_child(grid)
 	for pair in [["W / S", "gas, brake"], ["A / D", "steer"], ["Q / E", "shift"], ["L", "low range"],
+			["X", "AWD"], ["Z", "diff lock"], ["G / H", "winch, reel in"], ["I", "engine"],
 			["Space", "handbrake"], ["R", "reset"], ["C", "camera"], ["Esc", "pause"]]:
 		_text(grid, 20, Color("#f6bd60")).text = pair[0]
 		_text(grid, 20).text = pair[1]
@@ -157,6 +166,16 @@ func _text(parent: Control, size: int, color := CREAM) -> Label:
 	return l
 
 
+## Icon + text on one line; returns the label.
+func _row(parent: Control, icon: String, size: int, color := CREAM, icon_tint := Color.TRANSPARENT) -> Label:
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 6)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(h)
+	h.add_child(Icons.rect(icon, int(size * 1.05), color if icon_tint == Color.TRANSPARENT else icon_tint))
+	return _text(h, size, color)
+
+
 func _anchor_right(c: Control, top: float) -> void:
 	c.anchor_left = 1.0
 	c.anchor_right = 1.0
@@ -173,7 +192,7 @@ func _refresh_players() -> void:
 	_players_card.visible = Net.active
 	if not Net.active:
 		return
-	var head := _text(_players, 20, Color(CREAM, 0.75))
+	var head := _row(_players, "group", 20, Color(CREAM, 0.75))
 	head.text = "Hosting on %s" % ", ".join(Net.local_ips()) if Net.is_host() else "Online"
 	var ids := Net.players.keys()
 	ids.sort()
@@ -189,9 +208,26 @@ func _process(delta: float) -> void:
 		return
 	_car_lbl.text = str(car.spec["name"])
 	_trip.text = "Trip  %.1f km" % (car.trip / 1000.0)
-	_surface.text = "On %s" % SURFACES[car.surface].to_lower()
-	_coins.text = "Coins  %d / %d" % [GameState.coins.size(), feats.total_coins]
-	_views.text = "Viewpoints  %d / %d" % [feats.found_count(), feats.landmarks.size()]
+	_surface.text = "%s  ·  %s tyres" % [SURFACES[car.surface], car.tyre_name().to_lower()]
+	if car.sink > 0.55 and _mud_tip_t <= 0.0:
+		_mud_tip_t = 25.0
+		var tips: Array = []
+		if car.spec["awd"] == "switchable" and not car.awd_on:
+			tips.append("X: AWD")
+		if car.spec.get("diff_lock", false) and not car.diff_locked:
+			tips.append("Z: diff lock")
+		if car.has_low() and not car.low_range:
+			tips.append("L: low range")
+		if car.spec.get("winch", false):
+			tips.append("G: winch")
+		if not tips.is_empty():
+			toast("Stuck in mud?  " + "   ".join(tips))
+	_mud_tip_t -= delta
+	_health(_engine_lbl, car.engine_health)
+	_health(_wheels_lbl, car.worst_wheel())
+	_health(_body_lbl, car.body_health)
+	_coins.text = "%d / %d" % [GameState.coins.size(), feats.total_coins]
+	_views.text = "%d / %d" % [feats.found_count(), feats.landmarks.size()]
 	if _toast_t > 0.0:
 		_toast_t -= delta
 		_toast_card.modulate.a = clampf(_toast_t / 0.8, 0.0, 1.0)
@@ -199,6 +235,13 @@ func _process(delta: float) -> void:
 		_hint_t -= delta
 		_hint_card.modulate.a = clampf(_hint_t / 2.0, 0.0, 1.0)
 	_compass.queue_redraw()
+
+
+func _health(l: Label, v: float) -> void:
+	l.text = "%d%%  " % int(v * 100)
+	var c := Color("#f28482") if v < 0.4 else (Color("#f6bd60") if v < 0.8 else Color(CREAM, 0.8))
+	l.label_settings.font_color = c
+	(l.get_parent().get_child(0) as CanvasItem).modulate = c
 
 
 func toast(text: String) -> void:

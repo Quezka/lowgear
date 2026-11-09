@@ -8,7 +8,10 @@ Grab the latest build for Linux, Windows or Android from [Releases](https://gith
 To run from source: `godot --path .` (Godot 4.7).
 
 ## Controls
-W/S gas and brake · A/D steer · Q/E shift · L low range (Panda, Niva; stop first) · Space handbrake · R reset · C camera · Esc pause · F11 fullscreen. Gamepad works too. An automatic gearbox is in Settings.
+W/S gas and brake · A/D steer · Q/E shift · L low range · X AWD · Z diff lock · G winch (H reels in) · I engine · Space handbrake (toggle) · F lights · Y hazards · R reset / tow · C camera · Esc pause · F11 fullscreen. Gamepad and touch controls too.
+
+## Vehicles
+Sparrow 4x4, Taiga 4x4, Pebble, Kestrel U4, Volok 6x6, Bastion 8x8. Choose tyres (highway, all-terrain, mud, chains) and a snorkel in the menu. Mud, deep water, fuel and damage matter; fuel stations also repair.
 
 ## Multiplayer (up to 4, Linux / Windows / Android together)
 - **Host:** press *Host game*. Friends on your network (or Tailscale) press *Join* with the address shown in your HUD.

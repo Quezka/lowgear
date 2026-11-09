@@ -12,14 +12,16 @@ const CHUNKS := 16
 const SEA_FLOOR := -7.0
 const SNOW_LINE := 52.0
 const SPLAT := 512             # splat pixels per side (2 m each, one per grid cell)
-const LAYERS := ["meadow", "sand", "gravel", "rock", "snow", "dirt"]
+const LAYERS := ["meadow", "sand", "gravel", "rock", "snow", "dirt", "mud"]
 
 enum Surface { GRASS, SAND, ROCK, SNOW, WATER, MUD, GRAVEL }
 
 var heights := PackedFloat32Array()
 var spawn_transform := Transform3D.IDENTITY
 var splat_img: Image
+var mud_img: Image           ## R8, 0..1 mud depth per 2 m cell
 var tracks: Array = []         ## Array of PackedVector3Array polylines
+var mud_pit := Vector3.INF     ## the guaranteed mud pit on the first track
 var quality := 1
 
 var _base := FastNoiseLite.new()
@@ -113,11 +115,21 @@ func get_normal(x: float, z: float) -> Vector3:
 	return Vector3((hl - hr) / (2.0 * e), 1.0, (hd - hu) / (2.0 * e)).normalized()
 
 
+func mud_at(x: float, z: float) -> float:
+	if not mud_img:
+		return 0.0
+	var px := clampi(int((x + HALF) / CELL), 0, N - 1)
+	var pz := clampi(int((z + HALF) / CELL), 0, N - 1)
+	return mud_img.get_pixel(px, pz).r
+
+
 func surface_at(x: float, z: float) -> int:
 	if get_height(x, z) < 0.05:
 		return Surface.WATER
 	if not splat_img:
 		return Surface.GRASS
+	if mud_at(x, z) > 0.4:
+		return Surface.MUD
 	var px := clampi(int((x + HALF) / (2.0 * HALF) * SPLAT), 0, SPLAT - 1)
 	var pz := clampi(int((z + HALF) / (2.0 * HALF) * SPLAT), 0, SPLAT - 1)
 	var c := splat_img.get_pixel(px, pz)
@@ -262,6 +274,51 @@ func _build_splat() -> void:
 		_paint_track(pts, mpp)
 
 
+## Mud collects in hollows and on flat low ground; one guaranteed pit sits on the first track.
+func _build_mud() -> void:
+	mud_img = Image.create(N, N, false, Image.FORMAT_R8)
+	var wet := FastNoiseLite.new()
+	wet.seed = 77
+	wet.frequency = 0.012
+	wet.fractal_octaves = 3
+	var covered := 0
+	for j in N:
+		for i in N:
+			var h := heights[j * (N + 1) + i]
+			if h < 1.4:
+				continue
+			var c := splat_img.get_pixel(mini(i, SPLAT - 1), mini(j, SPLAT - 1))
+			if c.b + c.a > 0.3:
+				continue
+			var avg := (_h(i - 8, j) + _h(i + 8, j) + _h(i, j - 8) + _h(i, j + 8)) * 0.25
+			var hollow := clampf((avg - h) / 1.2, 0.0, 1.0)
+			var flat := smoothstep(0.93, 0.985, _normals[j * (N + 1) + i].y)
+			var low := 1.0 - smoothstep(2.0, 9.0, h)
+			var x := -HALF + i * CELL
+			var z := -HALF + j * CELL
+			var n := wet.get_noise_2d(x, z)
+			var m := clampf(hollow * 1.3 + low * flat * 0.6, 0.0, 1.0) * smoothstep(-0.05, 0.25, n)
+			if m > 0.02:
+				mud_img.set_pixel(i, j, Color(m, 0, 0))
+				if m > 0.4:
+					covered += 1
+	if not tracks.is_empty():
+		var pts: PackedVector3Array = tracks[0]
+		var p := pts[int(pts.size() * 0.35)]
+		var ci := int((p.x + HALF) / CELL)
+		var cj := int((p.z + HALF) / CELL)
+		for j in range(cj - 7, cj + 8):
+			for i in range(ci - 7, ci + 8):
+				if i < 0 or j < 0 or i >= N or j >= N:
+					continue
+				var d := Vector2(i - ci, j - cj).length() / 7.0
+				var m := clampf(0.95 - d, 0.0, 0.8)
+				if m > mud_img.get_pixel(i, j).r:
+					mud_img.set_pixel(i, j, Color(m, 0, 0))
+		mud_pit = Vector3(p.x, get_height(p.x, p.z), p.z)
+	print("[terrain] deep mud covers %.1f%% of the map" % (100.0 * covered / float(N * N)))
+
+
 func _paint_track(pts: PackedVector3Array, mpp: float) -> void:
 	var half_w := 2.4
 	for k in pts.size() - 1:
@@ -291,6 +348,7 @@ func build(q := 1) -> void:
 	var t0 := Time.get_ticks_msec()
 	_compute_normals()
 	_build_splat()
+	_build_mud()
 	print("[terrain] splat+normals %d ms" % (Time.get_ticks_msec() - t0))
 	_material = _make_material()
 	t0 = Time.get_ticks_msec()
@@ -324,6 +382,7 @@ func _make_material() -> ShaderMaterial:
 	m.set_shader_parameter("albedo_tex", alb)
 	m.set_shader_parameter("normal_tex", nor)
 	m.set_shader_parameter("splat", ImageTexture.create_from_image(splat_img))
+	m.set_shader_parameter("mud_map", ImageTexture.create_from_image(mud_img))
 	m.set_shader_parameter("map_half", HALF)
 	m.set_shader_parameter("use_normals", quality > 0)
 	var macro := NoiseTexture2D.new()

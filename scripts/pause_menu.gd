@@ -5,6 +5,7 @@ extends CanvasLayer
 signal change_car
 
 var _first: Button
+var _scroll: ScrollContainer
 
 
 func _ready() -> void:
@@ -21,23 +22,37 @@ func _ready() -> void:
 	add_child(center)
 	var panel := PanelContainer.new()
 	center.add_child(panel)
+	# Two columns so it fits short (phone) screens; settings scroll if needed.
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 28)
+	panel.add_child(cols)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 12)
-	v.custom_minimum_size = Vector2(460, 0)
-	panel.add_child(v)
+	v.custom_minimum_size = Vector2(320, 0)
+	cols.add_child(v)
 	var title := Label.new()
 	title.text = "Paused"
 	title.label_settings = GameState.label_settings(40, true)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(title)
 	_first = _button(v, "Resume", toggle)
+	_first.icon = Icons.tex("play_arrow", 64)
 	_first.theme_type_variation = "PrimaryButton"
-	_button(v, "Leave to menu" if Net.active else "Change car", func() -> void: change_car.emit())
-	v.add_child(SettingsList.new())
-	_button(v, "Quit game", func() -> void:
+	_button(v, "Main menu", func() -> void: change_car.emit()).icon = Icons.tex("home", 64)
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(440, 0)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	cols.add_child(scroll)
+	var settings := SettingsList.new()
+	settings.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(settings)
+	_scroll = scroll
+	var quit := _button(v, "Quit game", func() -> void:
 		GameState.save_game()
 		Net.leave()
 		get_tree().quit())
+	quit.icon = Icons.tex("exit_to_app", 64)
 
 
 func _button(parent: Control, text: String, cb: Callable) -> Button:
@@ -58,6 +73,10 @@ func _unhandled_input(event: InputEvent) -> void:
 func toggle() -> void:
 	visible = not visible
 	GameState.ui_open = visible
+	if visible:
+		# Fit the settings column to the screen height (phones are short).
+		var h := get_viewport().get_visible_rect().size.y
+		_scroll.custom_minimum_size.y = clampf(h - 140.0, 240.0, 600.0)
 	if not Net.active:
 		get_tree().paused = visible
 	if visible:

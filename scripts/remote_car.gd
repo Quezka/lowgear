@@ -35,6 +35,7 @@ func setup(id: int, info: Dictionary, tint: Color) -> void:
 		add_child(cs)
 	add_child(CarBuilder.build_visual(spec))
 	var positions := CarBuilder.wheel_positions(spec)
+	var axles: Array = spec["axles"]
 	for i in positions.size():
 		var pivot := Node3D.new()
 		pivot.position = positions[i] - Vector3(0, _drop, 0)
@@ -42,7 +43,7 @@ func setup(id: int, info: Dictionary, tint: Color) -> void:
 		var wv := CarBuilder.build_wheel_visual(spec)
 		pivot.add_child(wv)
 		_spinners.append(wv)
-		if i < 2:
+		if bool((axles[i / 2] as Dictionary)["steer"]):
 			_front.append(pivot)
 	_label = Label3D.new()
 	_label.text = str(info.get("name", "Driver"))

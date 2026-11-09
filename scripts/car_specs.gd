@@ -1,9 +1,23 @@
 class_name CarSpecs
 extends RefCounted
-## The cars. Each car faces +Z; parts are [shape, dims, position, colour key, rotation_degrees?].
-## Shapes: "box" dims=size, "cyl" dims=(top_r, bottom_r, height), "label" dims=text.
+## The vehicles (original designs and names). Each faces +Z.
+## parts: [shape, dims, position, colour key, rotation_degrees?]
+##   "box" = rounded box, "fbox" = sharp box, "cyl" = (top_r, bottom_r, height), "label" = text.
+## axles: front to back; "steer" and "drive" (drive on a "switchable" car = driven only with AWD on,
+## except the rear axles which are always driven).
 
-const ORDER := ["panda4x4", "niva", "mini_rally"]
+const ORDER := ["panda4x4", "niva", "mini_rally", "kestrel", "volok", "bastion"]
+const TYRES := ["highway", "allroad", "mud", "chains"]
+const TYRE_NAMES := {"highway": "Highway", "allroad": "All-terrain", "mud": "Mud", "chains": "Chains"}
+## Grip per surface (grass, sand, rock, snow, water, mud, gravel) for each tyre type.
+const TYRE_GRIP := {
+	"highway": [0.8, 0.6, 1.1, 0.4, 0.5, 0.3, 1.1],
+	"allroad": [1.0, 0.8, 1.05, 0.6, 0.6, 0.55, 1.0],
+	"mud": [1.05, 0.9, 0.9, 0.65, 0.7, 0.9, 0.92],
+	"chains": [1.0, 0.85, 0.95, 1.0, 0.6, 0.85, 0.85],
+}
+## How fast each tyre digs itself into mud (lower is better).
+const TYRE_SINK := {"highway": 1.3, "allroad": 1.0, "mud": 0.75, "chains": 0.9}
 
 
 static func get_spec(id: String) -> Dictionary:
@@ -14,147 +28,135 @@ static func get_spec(id: String) -> Dictionary:
 
 
 static func all_specs() -> Dictionary:
-	return {"panda4x4": _panda(), "niva": _niva(), "mini_rally": _mini()}
-
-
-static func _panda() -> Dictionary:
 	return {
-		"id": "panda4x4",
-		"name": "Panda 4x4",
-		"blurb": "Small, light and stubborn. Climbs steep grass like a goat, but it is never in a hurry.",
-		"stats": {"Speed": 2, "Climbing": 5, "Grip": 4, "Comfort": 3},
-		"mass": 800.0, "engine_force": 6200.0, "top_speed": 21.0, "drive": "awd",
-		"brake": 32.0, "steer_max": 0.55,
+		"panda4x4": _sparrow(), "niva": _taiga(), "mini_rally": _pebble(),
+		"kestrel": _kestrel(), "volok": _volok(), "bastion": _bastion(),
+	}
+
+
+static func two_axles(front: float, rear: float, front_drive: bool, rear_drive: bool) -> Array:
+	return [{"z": front, "steer": true, "drive": front_drive}, {"z": rear, "steer": false, "drive": rear_drive}]
+
+
+static func _sparrow() -> Dictionary:
+	return {
+		"id": "panda4x4", "name": "Sparrow 4x4", "class": "Scout",
+		"blurb": "Small, light and stubborn. Climbs steep grass like a goat, but sinks fast in deep mud.",
+		"stats": {"Speed": 2, "Climbing": 5, "Mud": 2, "Comfort": 3},
+		"mass": 800.0, "top_speed": 21.0, "awd": "full", "diff_lock": false,
+		"brake": 32.0, "steer_max": 0.55, "tyres": "allroad",
+		"fuel": 35.0, "burn": 0.012, "winch": false,
+		"intake": Vector3(0.4, 0.6, 1.5),
 		"drivetrain": {"gears": [3.91, 2.16, 1.48, 1.12, 0.89], "final": 4.46, "high": 1.0, "low": 1.6,
 			"torque": 100.0, "peak_rpm": 3000.0, "idle": 850.0, "redline": 6000.0, "cda": 0.8},
-		"wheel": {
-			"radius": 0.32, "width": 0.2, "x": 0.68, "front_z": 1.08, "rear_z": -1.08, "y": 0.35,
-			"rest": 0.26, "travel": 0.26, "stiffness": 38.0, "comp": 1.8, "relax": 2.6, "slip": 4.6, "roll": 0.5,
-		},
+		"axles": two_axles(1.08, -1.08, true, true),
+		"wheel": {"radius": 0.32, "width": 0.2, "x": 0.68, "y": 0.35, "lugs": 14,
+			"rest": 0.26, "travel": 0.26, "stiffness": 38.0, "comp": 1.8, "relax": 2.6, "slip": 4.6, "roll": 0.5},
 		"com": Vector3(0, -0.15, 0.1),
-		"collision": [
-			[Vector3(1.46, 0.5, 3.3), Vector3(0, 0.32, 0)],
-			[Vector3(1.3, 0.5, 1.9), Vector3(0, 0.84, -0.25)],
-		],
+		"collision": [[Vector3(1.46, 0.5, 3.3), Vector3(0, 0.32, 0)], [Vector3(1.3, 0.5, 1.9), Vector3(0, 0.84, -0.25)]],
 		"engine_sound": {"base": 38.0, "harsh": 0.55},
-		"colors": {
-			"body": Color("#9ed9c5"), "accent": Color("#fff1d6"), "trim": Color("#6c6f86"),
-			"glass": Color("#4a5578"), "light": Color("#fff6c2"), "tail": Color("#f28b9b"),
-			"tyre": Color("#3d405b"), "hub": Color("#f4ead5"),
-		},
+		"colors": {"body": Color("#9ed9c5"), "accent": Color("#fff1d6"), "trim": Color("#5c5f70"),
+			"glass": Color("#3b4560"), "light": Color("#fff6c2"), "tail": Color("#e8707f"),
+			"tyre": Color("#2e3038"), "hub": Color("#e7e1d3")},
 		"parts": [
 			["box", Vector3(1.5, 0.55, 3.35), Vector3(0, 0.3, 0), "body"],
 			["box", Vector3(1.38, 0.55, 2.0), Vector3(0, 0.85, -0.25), "body"],
 			["box", Vector3(1.4, 0.34, 2.02), Vector3(0, 0.9, -0.25), "glass"],
 			["box", Vector3(1.4, 0.06, 1.95), Vector3(0, 1.15, -0.25), "accent"],
-			["box", Vector3(1.54, 0.2, 3.39), Vector3(0, 0.12, 0), "trim"],
-			["box", Vector3(1.2, 0.05, 1.4), Vector3(0, 1.22, -0.3), "trim"],
+			["fbox", Vector3(1.54, 0.2, 3.39), Vector3(0, 0.12, 0), "trim"],
+			["fbox", Vector3(1.2, 0.05, 1.4), Vector3(0, 1.22, -0.3), "trim"],
 			["cyl", Vector3(0.28, 0.28, 0.18), Vector3(0, 1.34, -0.35), "tyre"],
-			["box", Vector3(0.9, 0.16, 0.04), Vector3(0, 0.45, 1.68), "trim"],
-			["box", Vector3(0.24, 0.12, 0.04), Vector3(-0.56, 0.45, 1.68), "light"],
-			["box", Vector3(0.24, 0.12, 0.04), Vector3(0.56, 0.45, 1.68), "light"],
-			["box", Vector3(0.16, 0.22, 0.04), Vector3(-0.62, 0.5, -1.68), "tail"],
-			["box", Vector3(0.16, 0.22, 0.04), Vector3(0.62, 0.5, -1.68), "tail"],
-			["box", Vector3(0.12, 0.1, 0.06), Vector3(-0.77, 0.78, 0.72), "trim"],
-			["box", Vector3(0.12, 0.1, 0.06), Vector3(0.77, 0.78, 0.72), "trim"],
-			["box", Vector3(1.52, 0.46, 0.02), Vector3(0, 0.33, 0.05), "trim"],
+			["fbox", Vector3(0.9, 0.16, 0.04), Vector3(0, 0.45, 1.68), "trim"],
+			["fbox", Vector3(0.24, 0.12, 0.04), Vector3(-0.56, 0.45, 1.68), "light"],
+			["fbox", Vector3(0.24, 0.12, 0.04), Vector3(0.56, 0.45, 1.68), "light"],
+			["fbox", Vector3(0.16, 0.22, 0.04), Vector3(-0.62, 0.5, -1.68), "tail"],
+			["fbox", Vector3(0.16, 0.22, 0.04), Vector3(0.62, 0.5, -1.68), "tail"],
+			["fbox", Vector3(0.12, 0.1, 0.06), Vector3(-0.77, 0.78, 0.72), "trim"],
+			["fbox", Vector3(0.12, 0.1, 0.06), Vector3(0.77, 0.78, 0.72), "trim"],
 			["cyl", Vector3(0.035, 0.035, 0.25), Vector3(0.45, 0.08, -1.75), "trim", Vector3(90, 0, 0)],
-			["box", Vector3(0.25, 0.22, 0.02), Vector3(-0.68, 0.02, -1.45), "trim"],
-			["box", Vector3(0.25, 0.22, 0.02), Vector3(0.68, 0.02, -1.45), "trim"],
 		],
 		"exhaust": Vector3(0.45, 0.08, -1.9),
 	}
 
 
-static func _niva() -> Dictionary:
+static func _taiga() -> Dictionary:
 	return {
-		"id": "niva",
-		"name": "Lada Niva",
-		"blurb": "Heavy, tall and soft as a sofa. Shrugs off rough ground and keeps going.",
-		"stats": {"Speed": 3, "Climbing": 4, "Grip": 3, "Comfort": 5},
-		"mass": 1150.0, "engine_force": 8600.0, "top_speed": 25.0, "drive": "awd",
-		"brake": 45.0, "steer_max": 0.5,
+		"id": "niva", "name": "Taiga 4x4", "class": "Scout",
+		"blurb": "Heavy, tall and soft as a sofa. Permanent 4x4 with a locking centre diff and a small winch.",
+		"stats": {"Speed": 3, "Climbing": 4, "Mud": 3, "Comfort": 5},
+		"mass": 1150.0, "top_speed": 25.0, "awd": "full", "diff_lock": true,
+		"brake": 45.0, "steer_max": 0.5, "tyres": "allroad",
+		"fuel": 42.0, "burn": 0.015, "winch": true, "winch_point": Vector3(0, 0.3, 1.97), "winch_force": 26000.0,
+		"intake": Vector3(0.5, 0.8, 1.6), "snorkel_intake": Vector3(0.86, 1.55, 0.55),
 		"drivetrain": {"gears": [3.67, 2.1, 1.36, 1.0, 0.82], "final": 3.9, "high": 1.2, "low": 2.135,
 			"torque": 129.0, "peak_rpm": 4000.0, "idle": 800.0, "redline": 5400.0, "cda": 0.95},
-		"wheel": {
-			"radius": 0.37, "width": 0.24, "x": 0.74, "front_z": 1.1, "rear_z": -1.1, "y": 0.42,
-			"rest": 0.34, "travel": 0.36, "stiffness": 30.0, "comp": 1.6, "relax": 2.1, "slip": 4.0, "roll": 0.45,
-		},
+		"axles": two_axles(1.1, -1.1, true, true),
+		"wheel": {"radius": 0.37, "width": 0.24, "x": 0.74, "y": 0.42, "lugs": 16,
+			"rest": 0.34, "travel": 0.36, "stiffness": 30.0, "comp": 1.6, "relax": 2.1, "slip": 4.0, "roll": 0.45},
 		"com": Vector3(0, -0.2, 0.15),
-		"collision": [
-			[Vector3(1.62, 0.55, 3.66), Vector3(0, 0.42, 0)],
-			[Vector3(1.5, 0.55, 1.9), Vector3(0, 0.98, -0.52)],
-		],
+		"collision": [[Vector3(1.62, 0.55, 3.66), Vector3(0, 0.42, 0)], [Vector3(1.5, 0.55, 1.9), Vector3(0, 0.98, -0.52)]],
 		"engine_sound": {"base": 30.0, "harsh": 0.75},
-		"colors": {
-			"body": Color("#f7dc8c"), "accent": Color("#b5c99a"), "trim": Color("#5d5f73"),
-			"glass": Color("#4a5578"), "light": Color("#fff6c2"), "tail": Color("#f28b9b"),
-			"tyre": Color("#3d405b"), "hub": Color("#e9e4d4"),
-		},
+		"colors": {"body": Color("#f2d58a"), "accent": Color("#a9bf8e"), "trim": Color("#4f5263"),
+			"glass": Color("#3b4560"), "light": Color("#fff6c2"), "tail": Color("#e8707f"),
+			"tyre": Color("#2e3038"), "hub": Color("#e3dccb")},
 		"parts": [
 			["box", Vector3(1.66, 0.6, 3.7), Vector3(0, 0.38, 0), "body"],
 			["box", Vector3(1.56, 0.6, 1.95), Vector3(0, 0.98, -0.52), "body"],
 			["box", Vector3(1.58, 0.38, 1.97), Vector3(0, 1.0, -0.52), "glass"],
-			["box", Vector3(1.4, 0.08, 1.6), Vector3(0, 1.36, -0.55), "trim"],
+			["fbox", Vector3(1.4, 0.08, 1.6), Vector3(0, 1.36, -0.55), "trim"],
 			["box", Vector3(1.72, 0.24, 0.2), Vector3(0, 0.22, 1.86), "trim"],
 			["box", Vector3(1.72, 0.24, 0.2), Vector3(0, 0.22, -1.86), "trim"],
-			["box", Vector3(1.72, 0.12, 2.0), Vector3(0, 0.12, 0), "trim"],
-			["box", Vector3(1.1, 0.26, 0.04), Vector3(0, 0.52, 1.86), "trim"],
+			["fbox", Vector3(1.72, 0.12, 2.0), Vector3(0, 0.12, 0), "trim"],
+			["fbox", Vector3(1.1, 0.26, 0.04), Vector3(0, 0.52, 1.86), "trim"],
 			["cyl", Vector3(0.12, 0.12, 0.05), Vector3(-0.62, 0.52, 1.86), "light", Vector3(90, 0, 0)],
 			["cyl", Vector3(0.12, 0.12, 0.05), Vector3(0.62, 0.52, 1.86), "light", Vector3(90, 0, 0)],
-			["box", Vector3(0.14, 0.26, 0.04), Vector3(-0.7, 0.55, -1.86), "tail"],
-			["box", Vector3(0.14, 0.26, 0.04), Vector3(0.7, 0.55, -1.86), "tail"],
-			["cyl", Vector3(0.06, 0.06, 1.0), Vector3(0.86, 0.95, 0.5), "trim"],
-			["box", Vector3(0.16, 0.12, 0.22), Vector3(0.86, 1.48, 0.55), "trim"],
+			["fbox", Vector3(0.14, 0.26, 0.04), Vector3(-0.7, 0.55, -1.86), "tail"],
+			["fbox", Vector3(0.14, 0.26, 0.04), Vector3(0.7, 0.55, -1.86), "tail"],
 			["box", Vector3(0.36, 0.46, 0.16), Vector3(0.45, 0.62, -1.93), "accent"],
-			["box", Vector3(0.12, 0.12, 0.06), Vector3(-0.85, 0.86, 0.43), "trim"],
-			["box", Vector3(0.12, 0.12, 0.06), Vector3(0.85, 0.86, 0.43), "trim"],
-			["box", Vector3(1.68, 0.56, 0.02), Vector3(0, 0.38, 0.2), "trim"],
-			["cyl", Vector3(0.04, 0.04, 0.3), Vector3(-0.5, 0.12, -1.9), "trim", Vector3(90, 0, 0)],
-			["box", Vector3(0.28, 0.26, 0.02), Vector3(-0.74, 0.08, -1.5), "trim"],
-			["box", Vector3(0.28, 0.26, 0.02), Vector3(0.74, 0.08, -1.5), "trim"],
+			["fbox", Vector3(0.12, 0.12, 0.06), Vector3(-0.85, 0.86, 0.43), "trim"],
+			["fbox", Vector3(0.12, 0.12, 0.06), Vector3(0.85, 0.86, 0.43), "trim"],
+			["cyl", Vector3(0.12, 0.12, 0.3), Vector3(0, 0.3, 1.9), "trim", Vector3(0, 0, 90)],
+		],
+		"snorkel_parts": [
+			["cyl", Vector3(0.06, 0.06, 1.0), Vector3(0.86, 0.95, 0.5), "trim"],
+			["fbox", Vector3(0.16, 0.12, 0.22), Vector3(0.86, 1.48, 0.55), "trim"],
 		],
 		"exhaust": Vector3(-0.5, 0.12, -2.05),
 	}
 
 
-static func _mini() -> Dictionary:
+static func _pebble() -> Dictionary:
 	return {
-		"id": "mini_rally",
-		"name": "Mini Rally",
-		"blurb": "Tiny, quick and a little nervous. Front-wheel drive, so steep climbs need a run-up.",
-		"stats": {"Speed": 5, "Climbing": 2, "Grip": 3, "Comfort": 2},
-		"mass": 720.0, "engine_force": 6400.0, "top_speed": 33.0, "drive": "fwd",
-		"brake": 30.0, "steer_max": 0.6,
+		"id": "mini_rally", "name": "Pebble", "class": "Fun car",
+		"blurb": "Tiny, quick and a little nervous. Front-wheel drive: steep climbs need a run-up and mud is a no.",
+		"stats": {"Speed": 5, "Climbing": 2, "Mud": 1, "Comfort": 2},
+		"mass": 720.0, "top_speed": 33.0, "awd": "fwd", "diff_lock": false,
+		"brake": 30.0, "steer_max": 0.6, "tyres": "highway",
+		"fuel": 35.0, "burn": 0.012, "winch": false,
+		"intake": Vector3(0.4, 0.5, 1.4),
 		"drivetrain": {"gears": [2.69, 1.75, 1.29, 1.0], "final": 4.2, "high": 1.0, "low": 0.0,
 			"torque": 115.0, "peak_rpm": 4500.0, "idle": 950.0, "redline": 7000.0, "cda": 0.6},
-		"wheel": {
-			"radius": 0.29, "width": 0.2, "x": 0.62, "front_z": 1.02, "rear_z": -1.02, "y": 0.3,
-			"rest": 0.19, "travel": 0.16, "stiffness": 55.0, "comp": 3.0, "relax": 3.6, "slip": 3.4, "roll": 0.55,
-		},
+		"axles": two_axles(1.02, -1.02, true, false),
+		"wheel": {"radius": 0.29, "width": 0.2, "x": 0.62, "y": 0.3, "lugs": 12,
+			"rest": 0.19, "travel": 0.16, "stiffness": 55.0, "comp": 3.0, "relax": 3.6, "slip": 3.4, "roll": 0.55},
 		"com": Vector3(0, -0.12, 0.25),
-		"collision": [
-			[Vector3(1.38, 0.45, 3.0), Vector3(0, 0.32, 0)],
-			[Vector3(1.26, 0.45, 1.7), Vector3(0, 0.79, -0.3)],
-		],
+		"collision": [[Vector3(1.38, 0.45, 3.0), Vector3(0, 0.32, 0)], [Vector3(1.26, 0.45, 1.7), Vector3(0, 0.79, -0.3)]],
 		"engine_sound": {"base": 46.0, "harsh": 0.65},
-		"colors": {
-			"body": Color("#f4978e"), "accent": Color("#fff6ee"), "trim": Color("#5b5e75"),
-			"glass": Color("#4a5578"), "light": Color("#fff3b0"), "tail": Color("#f28b9b"),
-			"tyre": Color("#3d405b"), "hub": Color("#fff6ee"),
-		},
+		"colors": {"body": Color("#ee8f86"), "accent": Color("#fff6ee"), "trim": Color("#4f5263"),
+			"glass": Color("#3b4560"), "light": Color("#fff3b0"), "tail": Color("#e8707f"),
+			"tyre": Color("#2e3038"), "hub": Color("#fff6ee")},
 		"parts": [
 			["box", Vector3(1.42, 0.5, 3.05), Vector3(0, 0.3, 0), "body"],
 			["box", Vector3(1.3, 0.48, 1.75), Vector3(0, 0.79, -0.3), "body"],
 			["box", Vector3(1.32, 0.3, 1.77), Vector3(0, 0.82, -0.3), "glass"],
 			["box", Vector3(1.34, 0.07, 1.68), Vector3(0, 1.05, -0.3), "accent"],
-			["box", Vector3(0.22, 0.02, 1.0), Vector3(-0.3, 0.56, 1.0), "accent"],
-			["box", Vector3(0.22, 0.02, 1.0), Vector3(0.3, 0.56, 1.0), "accent"],
+			["fbox", Vector3(0.22, 0.02, 1.0), Vector3(-0.3, 0.56, 1.0), "accent"],
+			["fbox", Vector3(0.22, 0.02, 1.0), Vector3(0.3, 0.56, 1.0), "accent"],
 			["box", Vector3(1.46, 0.14, 0.12), Vector3(0, 0.14, 1.55), "trim"],
 			["box", Vector3(1.46, 0.14, 0.12), Vector3(0, 0.14, -1.55), "trim"],
 			["cyl", Vector3(0.1, 0.1, 0.04), Vector3(-0.48, 0.45, 1.535), "light", Vector3(90, 0, 0)],
 			["cyl", Vector3(0.1, 0.1, 0.04), Vector3(0.48, 0.45, 1.535), "light", Vector3(90, 0, 0)],
-			["box", Vector3(1.0, 0.05, 0.05), Vector3(0, 0.62, 1.48), "trim"],
+			["fbox", Vector3(1.0, 0.05, 0.05), Vector3(0, 0.62, 1.48), "trim"],
 			["cyl", Vector3(0.11, 0.11, 0.06), Vector3(-0.33, 0.7, 1.5), "light", Vector3(90, 0, 0)],
 			["cyl", Vector3(0.11, 0.11, 0.06), Vector3(-0.11, 0.7, 1.5), "light", Vector3(90, 0, 0)],
 			["cyl", Vector3(0.11, 0.11, 0.06), Vector3(0.11, 0.7, 1.5), "light", Vector3(90, 0, 0)],
@@ -163,14 +165,173 @@ static func _mini() -> Dictionary:
 			["cyl", Vector3(0.24, 0.24, 0.02), Vector3(0.715, 0.36, 0.1), "accent", Vector3(0, 0, 90)],
 			["label", "37", Vector3(0.73, 0.36, 0.1), "trim", Vector3(0, 90, 0)],
 			["label", "37", Vector3(-0.73, 0.36, 0.1), "trim", Vector3(0, -90, 0)],
-			["box", Vector3(0.14, 0.18, 0.04), Vector3(-0.58, 0.45, -1.535), "tail"],
-			["box", Vector3(0.14, 0.18, 0.04), Vector3(0.58, 0.45, -1.535), "tail"],
-			["box", Vector3(0.1, 0.09, 0.05), Vector3(-0.71, 0.7, 0.55), "trim"],
-			["box", Vector3(0.1, 0.09, 0.05), Vector3(0.71, 0.7, 0.55), "trim"],
-			["box", Vector3(1.44, 0.44, 0.02), Vector3(0, 0.3, 0.45), "trim"],
-			["cyl", Vector3(0.035, 0.035, 0.22), Vector3(-0.4, 0.07, -1.6), "trim", Vector3(90, 0, 0)],
-			["box", Vector3(0.24, 0.2, 0.02), Vector3(-0.62, 0.0, -1.36), "trim"],
-			["box", Vector3(0.24, 0.2, 0.02), Vector3(0.62, 0.0, -1.36), "trim"],
+			["fbox", Vector3(0.14, 0.18, 0.04), Vector3(-0.58, 0.45, -1.535), "tail"],
+			["fbox", Vector3(0.14, 0.18, 0.04), Vector3(0.58, 0.45, -1.535), "tail"],
+			["fbox", Vector3(0.1, 0.09, 0.05), Vector3(-0.71, 0.7, 0.55), "trim"],
+			["fbox", Vector3(0.1, 0.09, 0.05), Vector3(0.71, 0.7, 0.55), "trim"],
 		],
 		"exhaust": Vector3(-0.4, 0.07, -1.75),
+	}
+
+
+static func _kestrel() -> Dictionary:
+	return {
+		"id": "kestrel", "name": "Kestrel U4", "class": "Utility",
+		"blurb": "A tall cab-forward workhorse with portal axles and a flatbed. Switchable AWD, diff locks, winch.",
+		"stats": {"Speed": 3, "Climbing": 4, "Mud": 4, "Comfort": 3},
+		"mass": 5500.0, "top_speed": 25.0, "awd": "switchable", "diff_lock": true,
+		"brake": 165.0, "steer_max": 0.55, "tyres": "mud",
+		"fuel": 160.0, "burn": 0.05, "winch": true, "winch_point": Vector3(0, 0.95, 2.98), "winch_force": 70000.0,
+		"intake": Vector3(1.0, 1.6, 2.0), "snorkel_intake": Vector3(-1.12, 2.85, 2.2),
+		"drivetrain": {"gears": [7.8, 5.2, 3.4, 2.2, 1.5, 1.0], "final": 3.9, "high": 1.0, "low": 1.9,
+			"torque": 650.0, "peak_rpm": 1600.0, "idle": 650.0, "redline": 2800.0, "cda": 2.5},
+		"axles": two_axles(1.55, -1.55, true, true),
+		"wheel": {"radius": 0.55, "width": 0.38, "x": 0.98, "y": 0.75, "lugs": 18,
+			"rest": 0.45, "travel": 0.45, "stiffness": 12.0, "comp": 1.2, "relax": 1.6, "slip": 3.6, "roll": 0.3},
+		"com": Vector3(0, 0.0, 0.3),
+		"collision": [[Vector3(2.1, 0.9, 5.6), Vector3(0, 1.3, 0.1)], [Vector3(2.1, 1.0, 1.6), Vector3(0, 2.1, 1.55)]],
+		"engine_sound": {"base": 20.0, "harsh": 0.85},
+		"colors": {"body": Color("#e9a46b"), "accent": Color("#f4efe6"), "trim": Color("#454856"),
+			"glass": Color("#3b4560"), "light": Color("#fff3c4"), "tail": Color("#e8707f"),
+			"tyre": Color("#2a2c33"), "hub": Color("#e3dccb")},
+		"parts": [
+			["fbox", Vector3(0.9, 0.25, 5.0), Vector3(0, 0.78, 0), "trim"],
+			["box", Vector3(2.1, 1.3, 1.6), Vector3(0, 1.75, 1.55), "body"],
+			["box", Vector3(2.15, 0.12, 1.5), Vector3(0, 2.45, 1.5), "accent"],
+			["fbox", Vector3(1.9, 0.6, 0.05), Vector3(0, 1.98, 2.36), "glass"],
+			["fbox", Vector3(2.12, 0.5, 1.0), Vector3(0, 1.98, 1.45), "glass"],
+			["box", Vector3(1.9, 0.75, 0.55), Vector3(0, 1.25, 2.55), "body"],
+			["fbox", Vector3(1.4, 0.35, 0.04), Vector3(0, 1.3, 2.83), "trim"],
+			["box", Vector3(2.2, 0.25, 0.28), Vector3(0, 0.85, 2.85), "trim"],
+			["cyl", Vector3(0.12, 0.12, 0.05), Vector3(-0.75, 1.35, 2.84), "light", Vector3(90, 0, 0)],
+			["cyl", Vector3(0.12, 0.12, 0.05), Vector3(0.75, 1.35, 2.84), "light", Vector3(90, 0, 0)],
+			["fbox", Vector3(2.2, 0.15, 2.6), Vector3(0, 1.35, -1.05), "trim"],
+			["box", Vector3(0.08, 0.45, 2.6), Vector3(-1.08, 1.62, -1.05), "accent"],
+			["box", Vector3(0.08, 0.45, 2.6), Vector3(1.08, 1.62, -1.05), "accent"],
+			["box", Vector3(2.2, 0.45, 0.08), Vector3(0, 1.62, -2.32), "accent"],
+			["box", Vector3(2.2, 0.45, 0.08), Vector3(0, 1.62, 0.22), "accent"],
+			["box", Vector3(0.5, 0.12, 1.3), Vector3(-0.98, 1.4, 1.55), "trim"],
+			["box", Vector3(0.5, 0.12, 1.3), Vector3(0.98, 1.4, 1.55), "trim"],
+			["box", Vector3(0.5, 0.12, 1.3), Vector3(-0.98, 1.3, -1.55), "trim"],
+			["box", Vector3(0.5, 0.12, 1.3), Vector3(0.98, 1.3, -1.55), "trim"],
+			["fbox", Vector3(0.18, 0.14, 0.04), Vector3(-0.9, 1.15, -2.36), "tail"],
+			["fbox", Vector3(0.18, 0.14, 0.04), Vector3(0.9, 1.15, -2.36), "tail"],
+			["fbox", Vector3(0.06, 0.3, 0.18), Vector3(-1.18, 2.0, 2.2), "trim"],
+			["fbox", Vector3(0.06, 0.3, 0.18), Vector3(1.18, 2.0, 2.2), "trim"],
+			["cyl", Vector3(0.05, 0.05, 1.0), Vector3(0.95, 2.3, 0.6), "trim"],
+			["cyl", Vector3(0.14, 0.14, 0.3), Vector3(0, 0.95, 2.95), "trim", Vector3(0, 0, 90)],
+		],
+		"snorkel_parts": [
+			["cyl", Vector3(0.08, 0.08, 1.4), Vector3(-1.12, 2.1, 2.2), "trim"],
+			["fbox", Vector3(0.22, 0.14, 0.3), Vector3(-1.12, 2.85, 2.25), "trim"],
+		],
+		"exhaust": Vector3(0.95, 2.82, 0.6),
+	}
+
+
+static func _volok() -> Dictionary:
+	return {
+		"id": "volok", "name": "Volok 6x6", "class": "Truck",
+		"blurb": "A long-nosed six-wheeler with a canvas cargo bed. Slow, thirsty and very hard to stop in mud.",
+		"stats": {"Speed": 2, "Climbing": 4, "Mud": 5, "Comfort": 2},
+		"mass": 9000.0, "top_speed": 24.0, "awd": "switchable", "diff_lock": true,
+		"brake": 180.0, "steer_max": 0.5, "tyres": "mud",
+		"fuel": 300.0, "burn": 0.08, "winch": true, "winch_point": Vector3(0, 1.0, 4.08), "winch_force": 110000.0,
+		"intake": Vector3(1.0, 1.9, 3.2), "snorkel_intake": Vector3(-1.2, 3.35, 2.35),
+		"drivetrain": {"gears": [6.2, 3.9, 2.4, 1.5, 1.0], "final": 6.0, "high": 1.0, "low": 2.1,
+			"torque": 900.0, "peak_rpm": 1600.0, "idle": 650.0, "redline": 2600.0, "cda": 3.5},
+		"axles": [{"z": 2.6, "steer": true, "drive": true}, {"z": -0.9, "steer": false, "drive": true},
+			{"z": -2.3, "steer": false, "drive": true}],
+		"wheel": {"radius": 0.6, "width": 0.4, "x": 1.0, "y": 0.85, "lugs": 20,
+			"rest": 0.5, "travel": 0.5, "stiffness": 8.0, "comp": 0.9, "relax": 1.2, "slip": 3.4, "roll": 0.3},
+		"com": Vector3(0, 0.1, 0.4),
+		"collision": [[Vector3(2.4, 1.0, 7.8), Vector3(0, 1.45, 0.2)], [Vector3(2.3, 1.3, 1.5), Vector3(0, 2.2, 1.45)]],
+		"engine_sound": {"base": 17.0, "harsh": 0.9},
+		"colors": {"body": Color("#8f9a6a"), "accent": Color("#c8b98f"), "trim": Color("#3f4235"),
+			"glass": Color("#3b4560"), "light": Color("#fff3c4"), "tail": Color("#e8707f"),
+			"tyre": Color("#2a2c33"), "hub": Color("#6f7558")},
+		"parts": [
+			["fbox", Vector3(0.95, 0.3, 7.2), Vector3(0, 0.9, 0.1), "trim"],
+			["box", Vector3(1.7, 0.95, 1.7), Vector3(0, 1.78, 3.0), "body"],
+			["fbox", Vector3(1.3, 0.6, 0.05), Vector3(0, 1.72, 3.86), "trim"],
+			["box", Vector3(0.62, 0.12, 1.5), Vector3(-1.0, 1.45, 2.65), "body"],
+			["box", Vector3(0.62, 0.12, 1.5), Vector3(1.0, 1.45, 2.65), "body"],
+			["box", Vector3(2.3, 0.3, 0.26), Vector3(0, 1.0, 3.95), "trim"],
+			["cyl", Vector3(0.13, 0.13, 0.12), Vector3(-0.95, 1.62, 3.45), "light", Vector3(90, 0, 0)],
+			["cyl", Vector3(0.13, 0.13, 0.12), Vector3(0.95, 1.62, 3.45), "light", Vector3(90, 0, 0)],
+			["box", Vector3(2.3, 1.25, 1.5), Vector3(0, 2.15, 1.45), "body"],
+			["box", Vector3(2.35, 0.1, 1.45), Vector3(0, 2.8, 1.45), "body"],
+			["fbox", Vector3(2.1, 0.55, 0.05), Vector3(0, 2.35, 2.21), "glass"],
+			["fbox", Vector3(2.32, 0.5, 0.8), Vector3(0, 2.35, 1.55), "glass"],
+			["fbox", Vector3(2.5, 0.2, 4.2), Vector3(0, 1.55, -1.35), "trim"],
+			["box", Vector3(0.08, 0.5, 4.2), Vector3(-1.25, 1.85, -1.35), "body"],
+			["box", Vector3(0.08, 0.5, 4.2), Vector3(1.25, 1.85, -1.35), "body"],
+			["box", Vector3(2.5, 0.5, 0.08), Vector3(0, 1.85, -3.45), "body"],
+			["box", Vector3(2.5, 1.5, 4.0), Vector3(0, 2.8, -1.35), "accent"],
+			["fbox", Vector3(0.2, 0.14, 0.04), Vector3(-1.0, 1.3, -3.5), "tail"],
+			["fbox", Vector3(0.2, 0.14, 0.04), Vector3(1.0, 1.3, -3.5), "tail"],
+			["fbox", Vector3(0.06, 0.32, 0.2), Vector3(-1.32, 2.4, 2.0), "trim"],
+			["fbox", Vector3(0.06, 0.32, 0.2), Vector3(1.32, 2.4, 2.0), "trim"],
+			["cyl", Vector3(0.06, 0.06, 1.2), Vector3(1.22, 2.65, 0.65), "trim"],
+			["cyl", Vector3(0.15, 0.15, 0.36), Vector3(0, 1.0, 4.0), "trim", Vector3(0, 0, 90)],
+		],
+		"snorkel_parts": [
+			["cyl", Vector3(0.09, 0.09, 1.6), Vector3(-1.2, 2.5, 2.3), "trim"],
+			["fbox", Vector3(0.25, 0.15, 0.3), Vector3(-1.2, 3.35, 2.35), "trim"],
+		],
+		"exhaust": Vector3(1.22, 3.27, 0.65),
+	}
+
+
+static func _bastion() -> Dictionary:
+	return {
+		"id": "bastion", "name": "Bastion 8x8", "class": "Heavy truck",
+		"blurb": "Eight driven wheels and a long flatbed. Unstoppable once it's moving, and it drinks diesel by the bucket.",
+		"stats": {"Speed": 2, "Climbing": 3, "Mud": 5, "Comfort": 3},
+		"mass": 16000.0, "top_speed": 22.0, "awd": "switchable", "diff_lock": true,
+		"brake": 240.0, "steer_max": 0.45, "tyres": "mud",
+		"fuel": 400.0, "burn": 0.14, "winch": true, "winch_point": Vector3(0, 1.2, 4.92), "winch_force": 180000.0,
+		"intake": Vector3(1.2, 2.4, 3.0), "snorkel_intake": Vector3(-1.4, 4.05, 3.05),
+		"drivetrain": {"gears": [7.0, 4.6, 3.0, 2.0, 1.4, 1.0], "final": 6.5, "high": 1.0, "low": 2.3,
+			"torque": 1800.0, "peak_rpm": 1400.0, "idle": 600.0, "redline": 2300.0, "cda": 5.0},
+		"axles": [{"z": 3.4, "steer": true, "drive": true}, {"z": 2.0, "steer": true, "drive": true},
+			{"z": -1.4, "steer": false, "drive": true}, {"z": -2.8, "steer": false, "drive": true}],
+		"wheel": {"radius": 0.68, "width": 0.45, "x": 1.1, "y": 0.95, "lugs": 22,
+			"rest": 0.55, "travel": 0.55, "stiffness": 6.0, "comp": 0.7, "relax": 1.0, "slip": 3.3, "roll": 0.3},
+		"com": Vector3(0, 0.2, 0.6),
+		"collision": [[Vector3(2.6, 1.0, 9.2), Vector3(0, 1.55, 0.3)], [Vector3(2.6, 1.7, 2.1), Vector3(0, 2.5, 3.65)]],
+		"engine_sound": {"base": 15.0, "harsh": 0.92},
+		"colors": {"body": Color("#7d93b2"), "accent": Color("#e8e4dc"), "trim": Color("#3a3f4b"),
+			"glass": Color("#3b4560"), "light": Color("#fff3c4"), "tail": Color("#e8707f"),
+			"tyre": Color("#2a2c33"), "hub": Color("#c9ccd4")},
+		"parts": [
+			["fbox", Vector3(1.0, 0.35, 8.4), Vector3(0, 1.0, 0.3), "trim"],
+			["box", Vector3(2.6, 1.7, 2.1), Vector3(0, 2.45, 3.65), "body"],
+			["box", Vector3(2.62, 0.12, 2.0), Vector3(0, 3.35, 3.6), "accent"],
+			["fbox", Vector3(2.4, 0.8, 0.05), Vector3(0, 2.75, 4.72), "glass"],
+			["fbox", Vector3(2.62, 0.6, 1.2), Vector3(0, 2.75, 3.9), "glass"],
+			["fbox", Vector3(1.8, 0.5, 0.05), Vector3(0, 1.85, 4.72), "trim"],
+			["box", Vector3(2.7, 0.35, 0.3), Vector3(0, 1.15, 4.75), "trim"],
+			["fbox", Vector3(0.35, 0.2, 0.04), Vector3(-1.0, 1.6, 4.73), "light"],
+			["fbox", Vector3(0.35, 0.2, 0.04), Vector3(1.0, 1.6, 4.73), "light"],
+			["fbox", Vector3(2.5, 0.08, 0.4), Vector3(0, 3.25, 4.8), "trim"],
+			["fbox", Vector3(2.6, 0.25, 6.0), Vector3(0, 1.75, -0.85), "trim"],
+			["box", Vector3(0.1, 0.4, 6.0), Vector3(-1.3, 2.05, -0.85), "accent"],
+			["box", Vector3(0.1, 0.4, 6.0), Vector3(1.3, 2.05, -0.85), "accent"],
+			["box", Vector3(2.6, 1.2, 0.12), Vector3(0, 2.45, 2.4), "trim"],
+			["fbox", Vector3(0.22, 0.14, 0.04), Vector3(-1.1, 1.4, -3.88), "tail"],
+			["fbox", Vector3(0.22, 0.14, 0.04), Vector3(1.1, 1.4, -3.88), "tail"],
+			["fbox", Vector3(0.06, 0.35, 0.22), Vector3(-1.45, 2.9, 4.4), "trim"],
+			["fbox", Vector3(0.06, 0.35, 0.22), Vector3(1.45, 2.9, 4.4), "trim"],
+			["cyl", Vector3(0.08, 0.08, 1.6), Vector3(-1.25, 3.4, 2.5), "trim"],
+			["cyl", Vector3(0.08, 0.08, 1.6), Vector3(1.25, 3.4, 2.5), "trim"],
+			["cyl", Vector3(0.35, 0.35, 1.2), Vector3(-1.05, 1.3, 0.9), "accent", Vector3(90, 0, 0)],
+			["cyl", Vector3(0.35, 0.35, 1.2), Vector3(1.05, 1.3, 0.9), "accent", Vector3(90, 0, 0)],
+			["cyl", Vector3(0.16, 0.16, 0.4), Vector3(0, 1.2, 4.85), "trim", Vector3(0, 0, 90)],
+		],
+		"snorkel_parts": [
+			["cyl", Vector3(0.1, 0.1, 1.7), Vector3(-1.4, 3.2, 3.0), "trim"],
+			["fbox", Vector3(0.28, 0.16, 0.34), Vector3(-1.4, 4.05, 3.05), "trim"],
+		],
+		"exhaust": Vector3(1.25, 4.2, 2.5),
 	}

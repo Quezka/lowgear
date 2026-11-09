@@ -22,6 +22,7 @@ var settings: Dictionary = {
 	"auto_gearbox": false,
 	"name": "Driver",
 	"quality": -1,
+	"garage": {},
 	"last_ip": "",
 }
 
@@ -111,6 +112,22 @@ func save_game() -> void:
 	cf.save(SAVE_PATH)
 
 
+## Per-vehicle setup chosen in the menu: {"tyres": String, "snorkel": bool}.
+func garage_for(id: String) -> Dictionary:
+	var spec := CarSpecs.get_spec(id)
+	var g: Dictionary = (settings.get("garage", {}) as Dictionary).get(id, {})
+	return {"tyres": str(g.get("tyres", spec.get("tyres", "allroad"))), "snorkel": bool(g.get("snorkel", false))}
+
+
+func set_garage(id: String, key: String, value: Variant) -> void:
+	var all: Dictionary = settings.get("garage", {})
+	var g: Dictionary = all.get(id, {})
+	g[key] = value
+	all[id] = g
+	settings["garage"] = all
+	save_game()
+
+
 ## 0 low, 1 medium, 2 high. -1 in the settings means "pick for this device".
 func quality() -> int:
 	if shot_args.has("quality"):
@@ -140,6 +157,19 @@ func _setup_input() -> void:
 	_keys("shift_up", [KEY_E, KEY_PAGEUP])
 	_keys("shift_down", [KEY_Q, KEY_PAGEDOWN])
 	_keys("low_range", [KEY_L])
+	_keys("lights", [KEY_F])
+	_keys("hazards", [KEY_Y])
+	_button("lights", JOY_BUTTON_LEFT_STICK)
+	_keys("awd", [KEY_X])
+	_keys("diff", [KEY_Z])
+	_keys("winch", [KEY_G])
+	_keys("winch_in", [KEY_H])
+	_keys("ignition", [KEY_I])
+	_button("awd", JOY_BUTTON_DPAD_UP)
+	_button("diff", JOY_BUTTON_DPAD_DOWN)
+	_button("winch", JOY_BUTTON_DPAD_RIGHT)
+	_button("winch_in", JOY_BUTTON_DPAD_LEFT)
+	_button("ignition", JOY_BUTTON_RIGHT_STICK)
 	_button("shift_up", JOY_BUTTON_RIGHT_SHOULDER)
 	_button("shift_down", JOY_BUTTON_LEFT_SHOULDER)
 	_button("low_range", JOY_BUTTON_BACK)
@@ -210,8 +240,11 @@ func ui_theme() -> Theme:
 		var focus := _box(Color(0, 0, 0, 0), Color("#6c4ee0"), 5)
 		focus.draw_center = false
 		t.set_stylebox("focus", type, focus)
-		for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
+		for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color",
+				"icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_focus_color", "icon_hover_pressed_color"]:
 			t.set_color(c, type, DARK)
+		t.set_constant("icon_max_width", type, 30)
+		t.set_constant("h_separation", type, 10)
 	t.set_color("font_color", "Label", DARK)
 	var panel := StyleBoxFlat.new()
 	panel.bg_color = Color(CREAM, 0.94)

@@ -7,7 +7,8 @@ func _ready() -> void:
 	add_theme_constant_override("separation", 10)
 	_quality()
 	_check("Automatic gearbox", "auto_gearbox")
-	_check("Fullscreen", "fullscreen")
+	if not OS.has_feature("mobile"):
+		_check("Fullscreen", "fullscreen")
 	_check("Shadows", "shadows")
 	_check("Soft film look", "grain")
 	_slider("Music", "music")

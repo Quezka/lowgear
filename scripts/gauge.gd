@@ -13,7 +13,7 @@ var car: Car
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	custom_minimum_size = Vector2(250, 220)
+	custom_minimum_size = Vector2(260, 268)
 
 
 func _process(_delta: float) -> void:
@@ -43,10 +43,28 @@ func _draw() -> void:
 	var chips: Array = []
 	if car.low_range:
 		chips.append(["LOW", Color("#f6bd60")])
-	chips.append(["AUTO" if car.is_auto() else "MANUAL", Color("#b8a1e3")])
-	var x := c.x - (chips.size() * 84.0 - 8.0) * 0.5
+	if car.awd_on and car.spec["awd"] == "switchable":
+		chips.append(["AWD", Color("#9ed9c5")])
+	if car.diff_locked:
+		chips.append(["DIFF", Color("#f28482")])
+	if car.parking:
+		chips.append(["P", Color("#f28482")])
+	chips.append(["AUTO" if car.is_auto() else "MAN", Color("#b8a1e3")])
+	var cw := 56.0 if chips.size() < 5 else 44.0
+	var x := c.x - (chips.size() * (cw + 6.0) - 6.0) * 0.5
 	for ch in chips:
-		var rect := Rect2(x, c.y - 70, 76, 26)
-		draw_rect(rect, Color(ch[1], 0.9))
-		draw_string(font, Vector2(rect.position.x, rect.position.y + 20), ch[0], HORIZONTAL_ALIGNMENT_CENTER, 76, 17, Color("#2b2d42"))
-		x += 84.0
+		var rect := Rect2(x, c.y - 72, cw, 24)
+		draw_rect(rect, Color(ch[1], 0.92))
+		draw_string(font, Vector2(rect.position.x, rect.position.y + 18), ch[0], HORIZONTAL_ALIGNMENT_CENTER, cw, 15, Color("#2b2d42"))
+		x += cw + 6.0
+	# Fuel.
+	var fr := car.fuel_ratio()
+	var bar := Rect2(c.x - 90, c.y + 128, 180, 12)
+	draw_rect(bar, Color(1, 1, 1, 0.16))
+	draw_rect(Rect2(bar.position, Vector2(bar.size.x * fr, bar.size.y)), CORAL if fr < 0.2 else Color("#f6bd60"))
+	draw_texture_rect(Icons.tex("local_gas_station", 36), Rect2(c.x - 90, c.y + 106, 18, 18), false, Color(CREAM, 0.85))
+	draw_string(font, Vector2(c.x - 68, c.y + 122), "%d L" % int(car.fuel), HORIZONTAL_ALIGNMENT_LEFT, 160, 15, Color(CREAM, 0.8))
+	if car.lights_mode > 0:
+		draw_texture_rect(Icons.tex("highlight", 36), Rect2(c.x + 50, c.y + 104, 20, 20), false, Color("#fff3c4") if car.lights_mode == 1 else Color("#8ecae6"))
+	if car.hazards:
+		draw_texture_rect(Icons.tex("warning", 36), Rect2(c.x + 72, c.y + 104, 20, 20), false, Color("#ffb347"))
