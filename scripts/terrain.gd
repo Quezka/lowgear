@@ -9,13 +9,13 @@ const CHUNK := 32
 const CHUNKS := 8
 const SEA_FLOOR := -7.0
 
-const SAND := Color("#f2dfb6")
+const SAND := Color("#ecd3a2")
 const WET_SAND := Color("#d9c9a6")
-const ROCK := Color("#b8acc9")
+const ROCK := Color("#a99bc0")
 const SNOW := Color("#f8f1f4")
-const GRASS_A := Color("#a6d6a0")
-const GRASS_B := Color("#c9e4a2")
-const MEADOW := Color("#dcdcaa")
+const GRASS_A := Color("#8fc98a")
+const GRASS_B := Color("#b2d98c")
+const MEADOW := Color("#cfd197")
 
 var heights := PackedFloat32Array()
 var spawn_transform := Transform3D.IDENTITY
@@ -41,6 +41,7 @@ func generate(seed_value := 1337) -> void:
 			heights[j * (N + 1) + i] = _raw_height(-HALF + i * CELL, z)
 	_material = StandardMaterial3D.new()
 	_material.vertex_color_use_as_albedo = true
+	_material.vertex_color_is_srgb = true
 	_material.roughness = 1.0
 	_material.metallic_specular = 0.1
 	_material.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -53,7 +54,7 @@ func generate(seed_value := 1337) -> void:
 func _setup_noise(s: int) -> void:
 	_base.seed = s
 	_base.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
-	_base.frequency = 0.0042
+	_base.frequency = 0.0036
 	_base.fractal_type = FastNoiseLite.FRACTAL_FBM
 	_base.fractal_octaves = 4
 	_ridge.seed = s + 1
@@ -75,9 +76,9 @@ func _raw_height(x: float, z: float) -> float:
 	var d := Vector2(x, z).length() / HALF + _warp.get_noise_2d(x, z) * 0.18
 	var mask := 1.0 - smoothstep(0.62, 0.93, d)
 	var base := clampf(_base.get_noise_2d(x, z) * 0.75 + 0.5, 0.0, 1.0)
-	var hills := pow(base, 1.7) * 62.0
+	var hills := pow(base, 1.7) * 44.0
 	var r := 1.0 - absf(_ridge.get_noise_2d(x, z))
-	var ridge := pow(r, 3.0) * 34.0 * (1.0 - smoothstep(0.2, 0.75, d))
+	var ridge := pow(r, 3.0) * 22.0 * (1.0 - smoothstep(0.2, 0.75, d))
 	var bumps := _bumps.get_noise_2d(x, z) * 1.6
 	var land := 5.0 + hills + ridge + bumps
 	return lerpf(SEA_FLOOR, land, mask)
@@ -192,7 +193,11 @@ func _find_spawn() -> void:
 	var z := HALF * 0.95
 	while z > 0.0 and get_height(0.0, z) < 3.0:
 		z -= 2.0
-	z -= 20.0
+	z -= 12.0
+	var tries := 0
+	while tries < 60 and get_normal(0.0, z).y < 0.97:
+		z -= 2.0
+		tries += 1
 	var h := get_height(0.0, z)
 	# Cars face +Z; turn around so we look inland.
 	spawn_transform = Transform3D(Basis(Vector3.UP, PI), Vector3(0.0, h + 1.2, z))

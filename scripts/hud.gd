@@ -14,6 +14,10 @@ var _views: Label
 var _toast: Label
 var _hint: Label
 var _fade: ColorRect
+var _gear: Label
+var _range: Label
+var _tach: ProgressBar
+var _tach_fill: StyleBoxFlat
 var _compass: Compass
 var _toast_t := 0.0
 var _hint_t := 14.0
@@ -60,8 +64,53 @@ func _ready() -> void:
 	_hint.offset_left = 28
 	_hint.offset_top = -56
 	_hint.offset_right = 1340
-	_hint.text = "W / S  gas & brake     A / D  steer     Space  handbrake     R  reset     C  camera     Esc  pause"
+	_hint.text = "W / S  gas & brake    A / D  steer    Q / E  shift    L  low range    Space  handbrake    R  reset    C  camera    Esc  pause"
 	root.add_child(_hint)
+
+	_gear = Label.new()
+	_gear.label_settings = GameState.label_settings(72)
+	_gear.anchor_left = 1.0
+	_gear.anchor_right = 1.0
+	_gear.anchor_top = 1.0
+	_gear.anchor_bottom = 1.0
+	_gear.offset_left = -150
+	_gear.offset_right = -36
+	_gear.offset_top = -170
+	_gear.offset_bottom = -80
+	_gear.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	root.add_child(_gear)
+	_range = Label.new()
+	_range.label_settings = GameState.label_settings(24)
+	_range.anchor_left = 1.0
+	_range.anchor_right = 1.0
+	_range.anchor_top = 1.0
+	_range.anchor_bottom = 1.0
+	_range.offset_left = -360
+	_range.offset_right = -36
+	_range.offset_top = -200
+	_range.offset_bottom = -168
+	_range.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	root.add_child(_range)
+	_tach = ProgressBar.new()
+	_tach.show_percentage = false
+	_tach.min_value = 0.0
+	_tach.max_value = 1.0
+	_tach.anchor_left = 1.0
+	_tach.anchor_right = 1.0
+	_tach.anchor_top = 1.0
+	_tach.anchor_bottom = 1.0
+	_tach.offset_left = -330
+	_tach.offset_right = -36
+	_tach.offset_top = -74
+	_tach.offset_bottom = -52
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color(0.17, 0.18, 0.26, 0.6)
+	bg.set_corner_radius_all(8)
+	_tach.add_theme_stylebox_override("background", bg)
+	_tach_fill = StyleBoxFlat.new()
+	_tach_fill.set_corner_radius_all(8)
+	_tach.add_theme_stylebox_override("fill", _tach_fill)
+	root.add_child(_tach)
 
 	_fade = ColorRect.new()
 	_fade.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -107,6 +156,10 @@ func _process(delta: float) -> void:
 	if _hint_t > 0.0:
 		_hint_t -= delta
 		_hint.modulate.a = clampf(_hint_t / 2.0, 0.0, 1.0)
+	_gear.text = car.gear_text()
+	_range.text = ("LOW  " if car.low_range else "") + ("AUTO" if car.is_auto() else "MANUAL")
+	_tach.value = car.rpm
+	_tach_fill.bg_color = Color("#9ed9c5").lerp(Color("#f28482"), clampf((car.rpm - 0.7) / 0.25, 0.0, 1.0))
 	_compass.queue_redraw()
 
 

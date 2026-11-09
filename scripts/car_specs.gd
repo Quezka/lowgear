@@ -25,9 +25,11 @@ static func _panda() -> Dictionary:
 		"stats": {"Speed": 2, "Climbing": 5, "Grip": 4, "Comfort": 3},
 		"mass": 800.0, "engine_force": 6200.0, "top_speed": 21.0, "drive": "awd",
 		"brake": 32.0, "steer_max": 0.55,
+		"drivetrain": {"gears": [3.91, 2.16, 1.48, 1.12, 0.89], "final": 4.46, "high": 1.0, "low": 1.6,
+			"torque": 100.0, "peak_rpm": 3000.0, "idle": 850.0, "redline": 6000.0, "cda": 0.8},
 		"wheel": {
 			"radius": 0.32, "width": 0.2, "x": 0.68, "front_z": 1.08, "rear_z": -1.08, "y": 0.35,
-			"rest": 0.26, "travel": 0.26, "stiffness": 38.0, "comp": 1.8, "relax": 2.6, "slip": 4.6, "roll": 0.25,
+			"rest": 0.26, "travel": 0.26, "stiffness": 38.0, "comp": 1.8, "relax": 2.6, "slip": 4.6, "roll": 0.5,
 		},
 		"com": Vector3(0, -0.15, 0.1),
 		"collision": [
@@ -65,9 +67,11 @@ static func _niva() -> Dictionary:
 		"stats": {"Speed": 3, "Climbing": 4, "Grip": 3, "Comfort": 5},
 		"mass": 1150.0, "engine_force": 8600.0, "top_speed": 25.0, "drive": "awd",
 		"brake": 45.0, "steer_max": 0.5,
+		"drivetrain": {"gears": [3.67, 2.1, 1.36, 1.0, 0.82], "final": 3.9, "high": 1.2, "low": 2.135,
+			"torque": 129.0, "peak_rpm": 4000.0, "idle": 800.0, "redline": 5400.0, "cda": 0.95},
 		"wheel": {
 			"radius": 0.37, "width": 0.24, "x": 0.74, "front_z": 1.1, "rear_z": -1.1, "y": 0.42,
-			"rest": 0.34, "travel": 0.36, "stiffness": 30.0, "comp": 1.6, "relax": 2.1, "slip": 4.0, "roll": 0.2,
+			"rest": 0.34, "travel": 0.36, "stiffness": 30.0, "comp": 1.6, "relax": 2.1, "slip": 4.0, "roll": 0.45,
 		},
 		"com": Vector3(0, -0.2, 0.15),
 		"collision": [
@@ -108,9 +112,11 @@ static func _mini() -> Dictionary:
 		"stats": {"Speed": 5, "Climbing": 2, "Grip": 3, "Comfort": 2},
 		"mass": 720.0, "engine_force": 6400.0, "top_speed": 33.0, "drive": "fwd",
 		"brake": 30.0, "steer_max": 0.6,
+		"drivetrain": {"gears": [2.69, 1.75, 1.29, 1.0], "final": 4.2, "high": 1.0, "low": 0.0,
+			"torque": 115.0, "peak_rpm": 4500.0, "idle": 950.0, "redline": 7000.0, "cda": 0.6},
 		"wheel": {
 			"radius": 0.29, "width": 0.2, "x": 0.62, "front_z": 1.02, "rear_z": -1.02, "y": 0.3,
-			"rest": 0.19, "travel": 0.16, "stiffness": 55.0, "comp": 3.0, "relax": 3.6, "slip": 3.4, "roll": 0.3,
+			"rest": 0.19, "travel": 0.16, "stiffness": 55.0, "comp": 3.0, "relax": 3.6, "slip": 3.4, "roll": 0.55,
 		},
 		"com": Vector3(0, -0.12, 0.25),
 		"collision": [

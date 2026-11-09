@@ -4,27 +4,27 @@ extends RefCounted
 
 const NIGHT := {
 	"top": Color("#2e3a6b"), "horizon": Color("#5b5f97"), "fog": Color("#4c5487"),
-	"light": Color("#a9b8ff"), "energy": 0.28, "ambient": 0.75,
+	"light": Color("#a9b8ff"), "energy": 0.22, "ambient": 0.3,
 }
 const DAWN := {
 	"top": Color("#8fa3d9"), "horizon": Color("#ffc4b8"), "fog": Color("#f5c6c0"),
-	"light": Color("#ffc9a3"), "energy": 0.8, "ambient": 0.75,
+	"light": Color("#ffc9a3"), "energy": 0.6, "ambient": 0.3,
 }
 const MORNING := {
 	"top": Color("#a9cdf0"), "horizon": Color("#fde7d3"), "fog": Color("#ece3e6"),
-	"light": Color("#fff0dc"), "energy": 1.1, "ambient": 0.8,
+	"light": Color("#fff0dc"), "energy": 0.8, "ambient": 0.32,
 }
 const NOON := {
 	"top": Color("#9ccbf2"), "horizon": Color("#e6f0f7"), "fog": Color("#dde9f2"),
-	"light": Color("#fff8ec"), "energy": 1.25, "ambient": 0.85,
+	"light": Color("#fff8ec"), "energy": 0.88, "ambient": 0.34,
 }
 const GOLDEN := {
 	"top": Color("#b7b6e8"), "horizon": Color("#ffd2a6"), "fog": Color("#f7d4bd"),
-	"light": Color("#ffd29a"), "energy": 1.0, "ambient": 0.78,
+	"light": Color("#ffd29a"), "energy": 0.78, "ambient": 0.32,
 }
 const DUSK := {
 	"top": Color("#7d79c2"), "horizon": Color("#f7a8b8"), "fog": Color("#c79bbf"),
-	"light": Color("#ff9eaa"), "energy": 0.55, "ambient": 0.72,
+	"light": Color("#ff9eaa"), "energy": 0.5, "ambient": 0.3,
 }
 
 static var KEYS: Array = [

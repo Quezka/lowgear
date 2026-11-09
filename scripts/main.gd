@@ -109,6 +109,7 @@ func _build() -> void:
 	feats.discovered.connect(func(n: String, c: int) -> void:
 		Sfx.play("discover")
 		hud.toast("Discovered: %s   (%d / %d)" % [n, c, feats.landmarks.size()]))
+	car.message.connect(func(t: String) -> void: hud.toast(t))
 	car.was_reset.connect(func() -> void:
 		Sfx.play("reset", 0.6)
 		hud.flash())
@@ -221,8 +222,8 @@ func _shot_tick(delta: float) -> void:
 	_stat_t += delta
 	if _stat_t >= 2.0:
 		_stat_t = 0.0
-		print("[shot] t=%.0f fps=%d kmh=%.0f fwd=%.1f pos=(%.0f, %.0f, %.0f) up=%.2f trip=%.0f resets=%d ground=%s" % [
-			_shot_t, Engine.get_frames_per_second(), car.linear_velocity.length() * 3.6, car.fwd_speed,
+		print("[shot] t=%.0f gear=%s low=%s rpm=%.0f fps=%d kmh=%.0f fwd=%.1f pos=(%.0f, %.0f, %.0f) up=%.2f trip=%.0f resets=%d ground=%s" % [
+			_shot_t, car.gear_text(), car.low_range, car.engine_rpm, Engine.get_frames_per_second(), car.linear_velocity.length() * 3.6, car.fwd_speed,
 			car.global_position.x, car.global_position.y, car.global_position.z,
 			car.global_transform.basis.y.y, car.trip, car.resets, car.grounded])
 	if not _shot_times.is_empty() and _shot_t >= float(_shot_times[0]):

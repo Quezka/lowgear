@@ -19,6 +19,7 @@ var settings: Dictionary = {
 	"grain": true,
 	"shadows": true,
 	"fullscreen": true,
+	"auto_gearbox": false,
 }
 
 ## Test mode: `godot --path . -- --shot [--menu] [--car=id] [--out=dir] [--tod=0.8]`
@@ -117,6 +118,12 @@ func _setup_input() -> void:
 	_keys("camera", [KEY_C])
 	_keys("pause", [KEY_ESCAPE, KEY_P])
 	_keys("fullscreen", [KEY_F11])
+	_keys("shift_up", [KEY_E, KEY_PAGEUP])
+	_keys("shift_down", [KEY_Q, KEY_PAGEDOWN])
+	_keys("low_range", [KEY_L])
+	_button("shift_up", JOY_BUTTON_RIGHT_SHOULDER)
+	_button("shift_down", JOY_BUTTON_LEFT_SHOULDER)
+	_button("low_range", JOY_BUTTON_BACK)
 	_axis("gas", JOY_AXIS_TRIGGER_RIGHT, 1.0)
 	_axis("brake", JOY_AXIS_TRIGGER_LEFT, 1.0)
 	_axis("left", JOY_AXIS_LEFT_X, -1.0)

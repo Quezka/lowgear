@@ -32,6 +32,7 @@ func _ready() -> void:
 	v.add_child(title)
 	_first = _button(v, "Resume", toggle)
 	_button(v, "Change car", func() -> void: change_car.emit())
+	_check(v, "Automatic gearbox", "auto_gearbox")
 	_check(v, "Fullscreen", "fullscreen")
 	_check(v, "Shadows", "shadows")
 	_check(v, "Film grain", "grain")

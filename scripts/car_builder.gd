@@ -131,12 +131,12 @@ static func build_vehicle(spec: Dictionary) -> Car:
 		wheel.use_as_traction = front or awd
 		wheel.add_child(build_wheel_visual(spec))
 		car.add_child(wheel)
-	for side in [-0.5, 0.5]:
+	for side in [0.0]:
 		var l := SpotLight3D.new()
 		l.position = Vector3(side, 0.5, 1.6)
 		l.rotation_degrees = Vector3(-6, 180, 0)
 		l.spot_range = 34.0
-		l.spot_angle = 32.0
+		l.spot_angle = 40.0
 		l.light_color = Color("#fff1c9")
 		l.light_energy = 0.0
 		l.visible = false

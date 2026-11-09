@@ -27,6 +27,7 @@ static func instance_mat() -> StandardMaterial3D:
 		return _mats["__inst"]
 	var m := StandardMaterial3D.new()
 	m.vertex_color_use_as_albedo = true
+	m.vertex_color_is_srgb = true
 	m.roughness = 0.95
 	m.metallic_specular = 0.15
 	_mats["__inst"] = m
