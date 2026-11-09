@@ -30,11 +30,14 @@ var grain: ColorRect
 var engine: EngineSound
 
 var _built := false
+var _remotes: Dictionary = {}  ## peer id -> RemoteCar
+var _net_tick := 0
+var _time_send := 0.0
 var _odo_last := 0.0
 var _save_t := 0.0
 # Test mode
 var _shot_t := 0.0
-var _shot_times: Array = [3.0, 10.0, 20.0]
+var _shot_times: Array = [3.0, 10.0, 20.0]  # extended with --long
 var _shot_targets: Array = []
 var _stat_t := 0.0
 var _fps_sum := 0.0
@@ -79,7 +82,12 @@ func _build() -> void:
 	car = CarBuilder.build_vehicle(spec)
 	car.terrain = terrain
 	add_child(car)
-	car.global_transform = terrain.spawn_transform
+	# In multiplayer each player starts a few metres to the side of the others.
+	var spawn := terrain.spawn_transform
+	if Net.active:
+		spawn.origin += spawn.basis.x * (Net.my_slot() * 5.0)
+		spawn.origin.y = terrain.get_height(spawn.origin.x, spawn.origin.z) + 1.2
+	car.global_transform = spawn
 	car.setup_wheels()
 
 	cam = ChaseCamera.new()
@@ -108,12 +116,23 @@ func _build() -> void:
 		hud.toast("Coin trail complete"))
 	feats.discovered.connect(func(n: String, c: int) -> void:
 		Sfx.play("discover")
-		hud.toast("Discovered: %s   (%d / %d)" % [n, c, feats.landmarks.size()]))
+		hud.toast("Discovered: %s   (%d / %d)" % [n, c, feats.landmarks.size()])
+		if Net.active:
+			Net.announce("%s found the %s" % [GameState.settings["name"], n]))
 	car.message.connect(func(t: String) -> void: hud.toast(t))
 	car.was_reset.connect(func() -> void:
 		Sfx.play("reset", 0.6)
 		hud.flash())
 	GameState.settings_changed.connect(_apply_settings)
+	Net.announced.connect(func(t: String) -> void:
+		if not t.begins_with(str(GameState.settings["name"]) + " found"):
+			hud.toast(t))
+	Net.car_state.connect(_on_car_state)
+	Net.roster_changed.connect(_sync_remotes)
+	Net.time_synced.connect(func(t: float) -> void:
+		if absf(wrapf(t - day.t, -0.5, 0.5)) > 0.002:
+			day.t = t)
+	_sync_remotes()
 	if GameState.shot_mode:
 		_setup_shot()
 
@@ -190,8 +209,41 @@ func _process(delta: float) -> void:
 		_shot_tick(delta)
 
 
+func _physics_process(delta: float) -> void:
+	if not _built or not Net.active:
+		return
+	_net_tick += 1
+	if _net_tick % 3 == 0:
+		Net.send_state(car.net_state())
+	_time_send += delta
+	if _time_send > 5.0:
+		_time_send = 0.0
+		Net.send_time(day.t)
+
+
+func _sync_remotes() -> void:
+	for id in _remotes.keys():
+		if not Net.players.has(id):
+			(_remotes[id] as Node).queue_free()
+			_remotes.erase(id)
+	for id in Net.players:
+		if id == Net.my_id() or _remotes.has(id):
+			continue
+		var rc := RemoteCar.new()
+		rc.setup(id, Net.players[id], Net.player_color(id))
+		add_child(rc)
+		_remotes[id] = rc
+
+
+func _on_car_state(id: int, data: Array) -> void:
+	if _remotes.has(id):
+		(_remotes[id] as RemoteCar).push(data)
+
+
 func _to_menu() -> void:
 	get_tree().paused = false
+	GameState.ui_open = false
+	Net.leave()
 	GameState.save_game()
 	get_tree().change_scene_to_file(MENU)
 
@@ -212,6 +264,14 @@ func _setup_shot() -> void:
 	print("[shot] car=%s spawn=%s landmarks=%d coins=%d" % [spec["id"], sp, feats.landmarks.size(), feats.total_coins])
 
 
+func _remote_summary() -> String:
+	var parts: Array = []
+	for id in _remotes:
+		var rc: RemoteCar = _remotes[id]
+		parts.append("%d@%.0fm" % [id, rc.global_position.distance_to(car.global_position)])
+	return ", ".join(parts)
+
+
 func _shot_tick(delta: float) -> void:
 	_shot_t += delta
 	_fps_sum += Engine.get_frames_per_second()
@@ -230,6 +290,7 @@ func _shot_tick(delta: float) -> void:
 		GameState.screenshot("%s_%02d.png" % [spec["id"], int(_shot_times[0])])
 		_shot_times.pop_front()
 	if _shot_times.is_empty():
+		print("[shot] net=%s players=%d remotes=%s" % [Net.active, Net.players.size(), _remote_summary()])
 		print("[shot] done car=%s avg_fps=%.1f trip=%.0f resets=%d coins=%d found=%d" % [
 			spec["id"], _fps_sum / maxf(_fps_n, 1), car.trip, car.resets, GameState.coins.size(), feats.found_count()])
 		get_tree().quit()

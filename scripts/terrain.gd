@@ -9,6 +9,9 @@ const CHUNK := 32
 const CHUNKS := 8
 const SEA_FLOOR := -7.0
 
+enum Surface { GRASS, SAND, ROCK, SNOW, WATER }
+const SNOW_LINE := 50.0
+
 const SAND := Color("#ecd3a2")
 const WET_SAND := Color("#d9c9a6")
 const ROCK := Color("#a99bc0")
@@ -148,7 +151,7 @@ func _color(h: float, ny: float, x: float, z: float) -> Color:
 		c = SAND
 	elif ny < 0.72:
 		c = ROCK
-	elif h > 58.0 and ny > 0.8:
+	elif h > SNOW_LINE and ny > 0.8:
 		c = SNOW
 	else:
 		c = GRASS_A.lerp(GRASS_B, _tint.get_noise_2d(x, z) * 0.5 + 0.5)
@@ -178,6 +181,20 @@ func get_height(x: float, z: float) -> float:
 	if fx >= fz:
 		return ha + (hb - ha) * fx + (hd - hb) * fz
 	return ha + (hc - ha) * fz + (hd - hc) * fx
+
+
+func surface_at(x: float, z: float) -> int:
+	var h := get_height(x, z)
+	if h < 0.05:
+		return Surface.WATER
+	if h < 1.4:
+		return Surface.SAND
+	var ny := get_normal(x, z).y
+	if ny < 0.72:
+		return Surface.ROCK
+	if h > SNOW_LINE and ny > 0.8:
+		return Surface.SNOW
+	return Surface.GRASS
 
 
 func get_normal(x: float, z: float) -> Vector3:

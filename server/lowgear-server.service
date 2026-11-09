@@ -1,0 +1,18 @@
+[Unit]
+Description=Lowgear multiplayer relay (UDP 24680)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=lowgear
+WorkingDirectory=/opt/lowgear
+ExecStart=/usr/local/bin/godot --headless --path /opt/lowgear -- --server
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/home/lowgear
+
+[Install]
+WantedBy=multi-user.target

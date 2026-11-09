@@ -8,6 +8,10 @@ signal message(text: String)
 
 const SHIFT_TIME := 0.25
 const EFFICIENCY := 0.85
+## Grip and rolling resistance per Terrain.Surface: grass, sand, rock, snow, water.
+const GRIP := [1.0, 0.72, 1.12, 0.55, 0.6]
+const DRAG := [0.0, 0.05, 0.0, 0.02, 0.1]
+const DUST := [Color(0.72, 0.7, 0.58), Color(0.93, 0.86, 0.72), Color(0.8, 0.76, 0.86), Color(1, 1, 1), Color(0.85, 0.93, 1.0)]
 
 var spec: Dictionary = {}
 var terrain: Terrain
@@ -18,6 +22,7 @@ var wheels: Array[VehicleWheel3D] = []
 var traction: Array[VehicleWheel3D] = []
 var rear: Array[VehicleWheel3D] = []
 var lights: Array[SpotLight3D] = []
+var tail_mats: Array[Material] = []
 
 var gear := 1          ## -1 reverse, 0 neutral, 1..n
 var low_range := false
@@ -28,6 +33,10 @@ var fwd_speed := 0.0   ## m/s along the car's nose
 var grounded := false
 var trip := 0.0        ## metres driven on the ground
 var resets := 0
+var surface := 0       ## Terrain.Surface under the car
+var skid := 0.0        ## 0..1 how much the tyres are sliding
+var jolt := 0.0        ## bumps, for the camera shake
+var braking := false
 
 var _dt: Dictionary
 var _steer := 0.0
@@ -38,6 +47,10 @@ var _last_safe := Transform3D.IDENTITY
 var _stuck_t := 0.0
 var _reverse_t := 0.0
 var _dust: CPUParticles3D
+var _exhaust: CPUParticles3D
+var _splash: CPUParticles3D
+var _base_slip := 4.0
+var _last_vy := 0.0
 
 
 func setup_wheels() -> void:
@@ -54,7 +67,10 @@ func setup_wheels() -> void:
 		elif c is SpotLight3D:
 			lights.append(c as SpotLight3D)
 	_last_safe = global_transform
+	_base_slip = (spec["wheel"] as Dictionary)["slip"]
 	_make_dust()
+	_make_exhaust()
+	_make_splash()
 
 
 func gear_count() -> int:
@@ -151,7 +167,7 @@ func _physics_process(delta: float) -> void:
 			gas = 0.0
 			brk = 1.0
 			steer_in = -steer_in
-	else:
+	elif not GameState.ui_open:
 		gas = Input.get_action_strength("gas")
 		brk = Input.get_action_strength("brake")
 		steer_in = Input.get_action_strength("left") - Input.get_action_strength("right")
@@ -224,6 +240,23 @@ func _physics_process(delta: float) -> void:
 			# Engine braking, stronger in low gears.
 			brake_v += clampf(linked / red, 0.0, 1.0) * absf(ratio) * 0.012 * brake_max
 	brake_v += brake_max * 0.015  # rolling resistance
+	# Each tyre grips according to what it is standing on.
+	if terrain:
+		for w in wheels:
+			var wp := w.global_position
+			var sf := terrain.surface_at(wp.x, wp.z)
+			w.wheel_friction_slip = _base_slip * float(GRIP[sf])
+		var new_surface := terrain.surface_at(global_position.x, global_position.z)
+		if new_surface != surface:
+			surface = new_surface
+			var ramp := _dust.color_ramp
+			var dc: Color = DUST[surface]
+			ramp.set_color(0, Color(dc, 0.45))
+			ramp.set_color(1, Color(dc, 0.0))
+	brake_v += brake_max * float(DRAG[surface])
+	braking = brk > 0.1
+	for m in tail_mats:
+		(m as StandardMaterial3D).emission_energy_multiplier = 2.6 if braking else 0.4
 	var per := force / maxf(traction.size(), 1.0)
 	for w in wheels:
 		w.engine_force = per if w.use_as_traction else 0.0
@@ -251,8 +284,21 @@ func _physics_process(delta: float) -> void:
 		apply_torque((b.x * (brk - gas) * 1.6 - b.z * steer_in * 1.2) * mass)
 	throttle = gas
 
-	_dust.emitting = contacts >= 2 and speed > 4.0 and global_position.y > 1.0
+	var grip := 1.0
+	for w in wheels:
+		if w.is_in_contact():
+			grip = minf(grip, w.get_skidinfo())
+	skid = lerpf(skid, (1.0 - grip) if grounded else 0.0, 1.0 - exp(-delta * 10.0))
+	jolt = lerpf(jolt, absf(linear_velocity.y - _last_vy) / maxf(delta, 0.001) * 0.02, 0.3)
+	_last_vy = linear_velocity.y
+
+	var in_water := global_position.y < 0.5
+	_dust.emitting = contacts >= 2 and not in_water and (speed > 4.0 or skid > 0.3) and surface != Terrain.Surface.WATER
 	_dust.initial_velocity_max = 1.0 + speed * 0.15
+	_exhaust.emitting = gas > 0.25 and engine_rpm > idle * 1.2
+	_splash.emitting = in_water and speed > 1.5
+	if in_water:
+		apply_central_force(-linear_velocity * mass * 0.5)
 
 	# Resets: on the roof for 2 s, or in the sea.
 	var up_y := b.y.y
@@ -305,6 +351,71 @@ func set_night(darkness: float) -> void:
 		l.light_energy = darkness * 4.0
 
 
+func _make_exhaust() -> void:
+	_exhaust = _puffs(10, 0.9, Color(0.7, 0.7, 0.75, 0.35), 0.25)
+	_exhaust.position = spec.get("exhaust", Vector3(0, 0.1, -1.8))
+	_exhaust.direction = Vector3(0, 0.3, -1)
+	_exhaust.initial_velocity_min = 0.6
+	_exhaust.initial_velocity_max = 1.2
+
+
+func _make_splash() -> void:
+	_splash = _puffs(40, 0.7, Color(0.9, 0.97, 1.0, 0.7), 0.35)
+	_splash.position = Vector3(0, -0.2, 0)
+	_splash.emission_box_extents = Vector3(0.9, 0.05, 1.6)
+	_splash.direction = Vector3(0, 1, 0)
+	_splash.spread = 50.0
+	_splash.gravity = Vector3(0, -9.8, 0)
+	_splash.initial_velocity_min = 2.0
+	_splash.initial_velocity_max = 4.0
+
+
+func _puffs(amount: int, life: float, color: Color, size: float) -> CPUParticles3D:
+	var p := CPUParticles3D.new()
+	p.amount = amount
+	p.lifetime = life
+	p.emitting = false
+	p.local_coords = false
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	p.emission_box_extents = Vector3(0.05, 0.05, 0.05)
+	p.spread = 20.0
+	p.gravity = Vector3(0, 0.6, 0)
+	p.damping_min = 1.0
+	p.damping_max = 2.0
+	var curve := Curve.new()
+	curve.add_point(Vector2(0, 0.5))
+	curve.add_point(Vector2(1, 1.8))
+	p.scale_amount_curve = curve
+	var ramp := Gradient.new()
+	ramp.set_color(0, color)
+	ramp.set_color(1, Color(color, 0.0))
+	p.color_ramp = ramp
+	p.mesh = _soft_quad(size)
+	add_child(p)
+	return p
+
+
+static func _soft_quad(size: float) -> QuadMesh:
+	var q := QuadMesh.new()
+	q.size = Vector2(size, size)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.vertex_color_use_as_albedo = true
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	var tex := GradientTexture2D.new()
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(0.5, 0.0)
+	var g := Gradient.new()
+	g.set_color(0, Color(1, 1, 1, 1))
+	g.set_color(1, Color(1, 1, 1, 0))
+	tex.gradient = g
+	m.albedo_texture = tex
+	q.material = m
+	return q
+
+
 func _make_dust() -> void:
 	_dust = CPUParticles3D.new()
 	_dust.amount = 28
@@ -354,4 +465,4 @@ func _make_dust() -> void:
 
 ## Compact state for the multiplayer sync (phase 2).
 func net_state() -> Array:
-	return [global_transform, linear_velocity, _steer, rpm, throttle, gear]
+	return [global_position, global_basis.get_rotation_quaternion(), linear_velocity, _steer, rpm, throttle, gear, braking]

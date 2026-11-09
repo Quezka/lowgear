@@ -41,7 +41,16 @@ static func _part(p: Array, colors: Dictionary) -> Node3D:
 		emission = 0.6
 	elif key == "tail":
 		emission = 0.4
-	mi.material_override = LowPoly.mat(c, rough, emission)
+	if key == "tail":
+		var tm := StandardMaterial3D.new()
+		tm.albedo_color = c
+		tm.emission_enabled = true
+		tm.emission = c
+		tm.emission_energy_multiplier = emission
+		mi.material_override = tm
+		mi.add_to_group("tail_light")
+	else:
+		mi.material_override = LowPoly.mat(c, rough, emission)
 	mi.position = p[2]
 	if p.size() > 4:
 		mi.rotation_degrees = p[4]
@@ -101,7 +110,7 @@ static func build_vehicle(spec: Dictionary) -> Car:
 	car.center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
 	car.center_of_mass = spec["com"]
 	car.collision_layer = 2
-	car.collision_mask = 1 | 2
+	car.collision_mask = 1 | 2 | 4
 	car.can_sleep = false
 	for c in spec["collision"]:
 		var cs := CollisionShape3D.new()
@@ -110,7 +119,11 @@ static func build_vehicle(spec: Dictionary) -> Car:
 		cs.shape = box
 		cs.position = c[1]
 		car.add_child(cs)
-	car.add_child(build_visual(spec))
+	var visual := build_visual(spec)
+	car.add_child(visual)
+	for n in visual.get_children():
+		if n.is_in_group("tail_light"):
+			car.tail_mats.append((n as MeshInstance3D).material_override)
 	var awd: bool = spec["drive"] == "awd"
 	var positions := wheel_positions(spec)
 	for i in positions.size():

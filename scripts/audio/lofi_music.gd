@@ -15,6 +15,8 @@ var _rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	if GameState.server_mode:
+		return
 	GameState.settings_changed.connect(_apply_volume)
 	_apply_volume()
 	if FileAccess.file_exists(CACHE):

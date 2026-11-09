@@ -55,7 +55,14 @@ static func _panda() -> Dictionary:
 			["box", Vector3(0.24, 0.12, 0.04), Vector3(0.56, 0.45, 1.68), "light"],
 			["box", Vector3(0.16, 0.22, 0.04), Vector3(-0.62, 0.5, -1.68), "tail"],
 			["box", Vector3(0.16, 0.22, 0.04), Vector3(0.62, 0.5, -1.68), "tail"],
+			["box", Vector3(0.12, 0.1, 0.06), Vector3(-0.77, 0.78, 0.72), "trim"],
+			["box", Vector3(0.12, 0.1, 0.06), Vector3(0.77, 0.78, 0.72), "trim"],
+			["box", Vector3(1.52, 0.46, 0.02), Vector3(0, 0.33, 0.05), "trim"],
+			["cyl", Vector3(0.035, 0.035, 0.25), Vector3(0.45, 0.08, -1.75), "trim", Vector3(90, 0, 0)],
+			["box", Vector3(0.25, 0.22, 0.02), Vector3(-0.68, 0.02, -1.45), "trim"],
+			["box", Vector3(0.25, 0.22, 0.02), Vector3(0.68, 0.02, -1.45), "trim"],
 		],
+		"exhaust": Vector3(0.45, 0.08, -1.9),
 	}
 
 
@@ -100,7 +107,14 @@ static func _niva() -> Dictionary:
 			["cyl", Vector3(0.06, 0.06, 1.0), Vector3(0.86, 0.95, 0.5), "trim"],
 			["box", Vector3(0.16, 0.12, 0.22), Vector3(0.86, 1.48, 0.55), "trim"],
 			["box", Vector3(0.36, 0.46, 0.16), Vector3(0.45, 0.62, -1.93), "accent"],
+			["box", Vector3(0.12, 0.12, 0.06), Vector3(-0.85, 0.86, 0.43), "trim"],
+			["box", Vector3(0.12, 0.12, 0.06), Vector3(0.85, 0.86, 0.43), "trim"],
+			["box", Vector3(1.68, 0.56, 0.02), Vector3(0, 0.38, 0.2), "trim"],
+			["cyl", Vector3(0.04, 0.04, 0.3), Vector3(-0.5, 0.12, -1.9), "trim", Vector3(90, 0, 0)],
+			["box", Vector3(0.28, 0.26, 0.02), Vector3(-0.74, 0.08, -1.5), "trim"],
+			["box", Vector3(0.28, 0.26, 0.02), Vector3(0.74, 0.08, -1.5), "trim"],
 		],
+		"exhaust": Vector3(-0.5, 0.12, -2.05),
 	}
 
 
@@ -151,5 +165,12 @@ static func _mini() -> Dictionary:
 			["label", "37", Vector3(-0.73, 0.36, 0.1), "trim", Vector3(0, -90, 0)],
 			["box", Vector3(0.14, 0.18, 0.04), Vector3(-0.58, 0.45, -1.535), "tail"],
 			["box", Vector3(0.14, 0.18, 0.04), Vector3(0.58, 0.45, -1.535), "tail"],
+			["box", Vector3(0.1, 0.09, 0.05), Vector3(-0.71, 0.7, 0.55), "trim"],
+			["box", Vector3(0.1, 0.09, 0.05), Vector3(0.71, 0.7, 0.55), "trim"],
+			["box", Vector3(1.44, 0.44, 0.02), Vector3(0, 0.3, 0.45), "trim"],
+			["cyl", Vector3(0.035, 0.035, 0.22), Vector3(-0.4, 0.07, -1.6), "trim", Vector3(90, 0, 0)],
+			["box", Vector3(0.24, 0.2, 0.02), Vector3(-0.62, 0.0, -1.36), "trim"],
+			["box", Vector3(0.24, 0.2, 0.02), Vector3(0.62, 0.0, -1.36), "trim"],
 		],
+		"exhaust": Vector3(-0.4, 0.07, -1.75),
 	}

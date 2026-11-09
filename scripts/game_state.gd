@@ -20,10 +20,15 @@ var settings: Dictionary = {
 	"shadows": true,
 	"fullscreen": true,
 	"auto_gearbox": false,
+	"name": "Driver",
+	"last_ip": "",
 }
 
 ## Test mode: `godot --path . -- --shot [--menu] [--car=id] [--out=dir] [--tod=0.8]`
 var shot_mode := false
+var ui_open := false  ## a menu is open over the drive: cars ignore input
+## `godot --headless --path . -- --server` runs a relay for multiplayer with no window.
+var server_mode := false
 var shot_args: Dictionary = {}
 
 var _theme: Theme
@@ -43,11 +48,14 @@ func _parse_args() -> void:
 			var kv := a.substr(2).split("=", true, 1)
 			shot_args[kv[0]] = kv[1] if kv.size() > 1 else "1"
 	shot_mode = shot_args.has("shot")
+	server_mode = shot_args.has("server")
 	if shot_args.has("car"):
 		car_id = str(shot_args["car"])
 
 
 func apply_window() -> void:
+	if server_mode:
+		return
 	if shot_mode:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 		DisplayServer.window_set_size(Vector2i(1366, 768))
@@ -91,7 +99,7 @@ func load_game() -> void:
 
 
 func save_game() -> void:
-	if shot_mode:
+	if shot_mode or server_mode:
 		return
 	var cf := ConfigFile.new()
 	cf.set_value("game", "car", car_id)
@@ -211,6 +219,20 @@ func ui_theme() -> Theme:
 	fill.bg_color = Color("#9b8ae6")
 	t.set_stylebox("grabber_area", "HSlider", fill)
 	t.set_stylebox("grabber_area_highlight", "HSlider", fill)
+	# Primary (mint) button and text fields.
+	t.set_type_variation("PrimaryButton", "Button")
+	t.set_stylebox("normal", "PrimaryButton", _box(Color("#9ed9c5")))
+	t.set_stylebox("hover", "PrimaryButton", _box(Color("#b5e6d5")))
+	t.set_stylebox("pressed", "PrimaryButton", _box(Color("#84c7b0")))
+	t.set_font_size("font_size", "PrimaryButton", 32)
+	var field := _box(Color.WHITE)
+	t.set_stylebox("normal", "LineEdit", field)
+	var field_focus := _box(Color.WHITE, Color("#6c4ee0"), 4)
+	t.set_stylebox("focus", "LineEdit", field_focus)
+	t.set_color("font_color", "LineEdit", DARK)
+	t.set_color("font_placeholder_color", "LineEdit", MUTED)
+	t.set_color("caret_color", "LineEdit", DARK)
+	t.set_font_size("font_size", "LineEdit", 26)
 	_theme = t
 	return t
 

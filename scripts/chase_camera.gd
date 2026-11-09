@@ -12,6 +12,7 @@ var _heading := Vector3(0, 0, 1)
 var _yaw_off := 0.0
 var _mouse_t := 0.0
 var _cine_pos := Vector3.ZERO
+var _shake := 0.0
 
 
 func _ready() -> void:
@@ -76,6 +77,9 @@ func _process(delta: float) -> void:
 	var ground := terrain.get_height(desired.x, desired.z) + 1.2
 	desired.y = maxf(desired.y, maxf(ground, 0.6))
 	global_position = global_position.lerp(desired, 1.0 - exp(-delta * 5.0))
+	_shake = lerpf(_shake, clampf(target.jolt, 0.0, 1.0), 1.0 - exp(-delta * 8.0))
+	if _shake > 0.02:
+		global_position += Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * _shake * 0.12
 	var look := car_pos + Vector3.UP * 1.0 + h * 2.0
 	if global_position.distance_to(look) > 0.5:
 		look_at(look, Vector3.UP)

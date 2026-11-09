@@ -12,6 +12,10 @@ var _ph := 0.0
 var _ph2 := 0.0
 var _lp := 0.0
 var _amp := 0.0
+var _rumble_lp := 0.0
+var _hiss_lp := 0.0
+var _rumble_amp := 0.0
+var _hiss_amp := 0.0
 var _rng := RandomNumberGenerator.new()
 
 
@@ -43,6 +47,11 @@ func _process(_delta: float) -> void:
 	var target := 0.10 + 0.16 * car.throttle + 0.05 * car.rpm
 	var cutoff := 0.12 + 0.35 * car.throttle
 	var noise := 0.08 * car.throttle
+	# Tyres: low rumble from the ground (rougher on rock and sand), hiss when sliding.
+	var rough: float = [0.5, 0.75, 1.0, 0.35, 0.9][car.surface]
+	var speed := car.linear_velocity.length()
+	var rumble_target := clampf(speed / 20.0, 0.0, 1.0) * rough * 0.5 if car.grounded else 0.0
+	var hiss_target := clampf(car.skid * 1.4, 0.0, 1.0) * clampf(speed / 6.0, 0.0, 1.0) * 0.35
 	var buf := PackedVector2Array()
 	buf.resize(n)
 	for i in n:
@@ -52,6 +61,11 @@ func _process(_delta: float) -> void:
 		var pulse := 1.0 if _ph2 < 0.35 else -0.6
 		var s := sin(_ph * TAU) * (1.0 - harsh) + (_ph * 2.0 - 1.0) * harsh * 0.6 + pulse * 0.25 + _rng.randf_range(-1.0, 1.0) * noise
 		_lp += (s - _lp) * cutoff
-		var v := _lp * _amp
+		_rumble_amp += (rumble_target - _rumble_amp) * 0.001
+		_hiss_amp += (hiss_target - _hiss_amp) * 0.002
+		var nz := _rng.randf_range(-1.0, 1.0)
+		_rumble_lp += (nz - _rumble_lp) * 0.04
+		_hiss_lp += (nz - _hiss_lp) * 0.5
+		var v := _lp * _amp + _rumble_lp * _rumble_amp * 1.6 + (nz - _hiss_lp) * _hiss_amp
 		buf[i] = Vector2(v, v)
 	_pb.push_buffer(buf)

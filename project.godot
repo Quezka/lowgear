@@ -19,6 +19,7 @@ boot_splash/use_filter=true
 GameState="*res://scripts/game_state.gd"
 Music="*res://scripts/audio/lofi_music.gd"
 Sfx="*res://scripts/audio/sfx.gd"
+Net="*res://scripts/net.gd"
 
 [display]
 

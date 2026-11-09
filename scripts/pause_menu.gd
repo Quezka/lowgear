@@ -1,6 +1,6 @@
 class_name PauseMenu
 extends CanvasLayer
-## Esc menu: resume, change car, settings, quit.
+## Esc menu. In multiplayer the world keeps running (others are still driving).
 
 signal change_car
 
@@ -31,54 +31,22 @@ func _ready() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(title)
 	_first = _button(v, "Resume", toggle)
-	_button(v, "Change car", func() -> void: change_car.emit())
-	_check(v, "Automatic gearbox", "auto_gearbox")
-	_check(v, "Fullscreen", "fullscreen")
-	_check(v, "Shadows", "shadows")
-	_check(v, "Film grain", "grain")
-	_slider(v, "Music", "music")
-	_slider(v, "Engine", "engine")
-	_slider(v, "Sounds", "sfx")
+	_first.theme_type_variation = "PrimaryButton"
+	_button(v, "Leave to menu" if Net.active else "Change car", func() -> void: change_car.emit())
+	v.add_child(SettingsList.new())
 	_button(v, "Quit game", func() -> void:
 		GameState.save_game()
+		Net.leave()
 		get_tree().quit())
 
 
 func _button(parent: Control, text: String, cb: Callable) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.custom_minimum_size = Vector2(0, 54)
+	b.custom_minimum_size = Vector2(0, 52)
 	b.pressed.connect(cb)
 	parent.add_child(b)
 	return b
-
-
-func _check(parent: Control, text: String, key: String) -> void:
-	var c := CheckButton.new()
-	c.text = text
-	c.button_pressed = bool(GameState.settings[key])
-	c.toggled.connect(func(on: bool) -> void: GameState.set_setting(key, on))
-	parent.add_child(c)
-
-
-func _slider(parent: Control, text: String, key: String) -> void:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 16)
-	var l := Label.new()
-	l.text = text
-	l.custom_minimum_size = Vector2(130, 0)
-	row.add_child(l)
-	var s := HSlider.new()
-	s.min_value = 0.0
-	s.max_value = 1.0
-	s.step = 0.05
-	s.value = float(GameState.settings[key])
-	s.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	s.custom_minimum_size = Vector2(0, 32)
-	s.value_changed.connect(func(val: float) -> void: GameState.set_setting(key, val))
-	row.add_child(s)
-	parent.add_child(row)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -89,7 +57,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func toggle() -> void:
 	visible = not visible
-	get_tree().paused = visible
+	GameState.ui_open = visible
+	if not Net.active:
+		get_tree().paused = visible
 	if visible:
 		_first.grab_focus()
 	else:
