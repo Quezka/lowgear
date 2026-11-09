@@ -29,6 +29,11 @@ func _ready() -> void:
 	_build_ui()
 	_show_car()
 	Net.status.connect(_on_status)
+	Updater.update_available.connect(_on_update)
+	Updater.progress.connect(_on_status)
+	if not Updater.latest.is_empty():
+		_on_update(Updater.latest)
+	Updater.check()
 	Net.joined.connect(_on_joined)
 	if GameState.shot_mode:
 		_shot()
@@ -350,6 +355,18 @@ func _join() -> void:
 func _on_status(text: String) -> void:
 	if _status:
 		_status.text = text
+
+
+func _on_update(v: String) -> void:
+	var b := Button.new()
+	b.text = "Update to %s" % v
+	b.theme_type_variation = "PrimaryButton"
+	b.pressed.connect(func() -> void:
+		b.disabled = true
+		Updater.install())
+	_status.get_parent().add_child(b)
+	_status.get_parent().move_child(b, 0)
+	_status.text = "A new version is out: %s (you have %s)" % [v, Net.version()]
 
 
 func _on_joined() -> void:

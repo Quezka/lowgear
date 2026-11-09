@@ -11,6 +11,8 @@ signal announced(text: String)
 signal time_synced(t: float)
 
 const PORT := 24680
+## Bump when the network messages change; players must match to play together.
+const PROTOCOL := 1
 const MAX_CLIENTS := 3
 const COLORS := [Color("#ff8fab"), Color("#8ecae6"), Color("#f6bd60"), Color("#b8a1e3")]
 
@@ -125,14 +127,24 @@ func _free_slot() -> int:
 
 
 func _on_connected() -> void:
-	_register.rpc_id(1, str(GameState.settings["name"]), GameState.car_id)
+	_register.rpc_id(1, str(GameState.settings["name"]), GameState.car_id, PROTOCOL, version())
+
+
+static func version() -> String:
+	return str(ProjectSettings.get_setting("application/config/version", "0"))
 
 
 @rpc("any_peer", "reliable")
-func _register(player_name: String, car: String) -> void:
+func _register(player_name: String, car: String, protocol := 0, their_version := "?") -> void:
 	if not multiplayer.is_server():
 		return
 	var id := multiplayer.get_remote_sender_id()
+	if protocol != PROTOCOL:
+		_rejected.rpc_id(id, "This game runs version %s, you have %s. Update and try again." % [version(), their_version])
+		get_tree().create_timer(1.0).timeout.connect(func() -> void:
+			if multiplayer.multiplayer_peer:
+				multiplayer.multiplayer_peer.disconnect_peer(id))
+		return
 	player_name = player_name.strip_edges().substr(0, 16)
 	if player_name.is_empty():
 		player_name = "Driver"
@@ -142,6 +154,12 @@ func _register(player_name: String, car: String) -> void:
 	_roster.rpc(players)
 	roster_changed.emit()
 	announce("%s joined" % player_name)
+
+
+@rpc("authority", "reliable")
+func _rejected(reason: String) -> void:
+	status.emit(reason)
+	leave()
 
 
 @rpc("authority", "reliable")

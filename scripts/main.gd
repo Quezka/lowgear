@@ -106,6 +106,8 @@ func _build() -> void:
 	add_child(pause)
 	pause.change_car.connect(_to_menu)
 	grain = _grain_layer()
+	if TouchControls.wanted():
+		add_child(TouchControls.new())
 	engine = EngineSound.new()
 	add_child(engine)
 	engine.setup(car)

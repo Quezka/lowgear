@@ -67,12 +67,13 @@ func _ready() -> void:
 	root.add_child(_compass)
 
 	# Bottom right: instruments.
+	var touch := TouchControls.wanted()
 	var gc := _card(root)
-	gc.anchor_left = 1.0
-	gc.anchor_right = 1.0
+	gc.anchor_left = 0.5 if touch else 1.0
+	gc.anchor_right = gc.anchor_left
 	gc.anchor_top = 1.0
 	gc.anchor_bottom = 1.0
-	gc.offset_right = -20
+	gc.offset_right = 125 if touch else -20
 	gc.offset_bottom = -16
 	gc.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	gc.grow_vertical = Control.GROW_DIRECTION_BEGIN
@@ -85,8 +86,8 @@ func _ready() -> void:
 	tc.anchor_right = 1.0
 	tc.anchor_top = 1.0
 	tc.anchor_bottom = 1.0
-	tc.offset_top = -200
-	tc.offset_bottom = -130
+	tc.offset_top = -330 if touch else -200
+	tc.offset_bottom = -260 if touch else -130
 	tc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(tc)
 	_toast_card = _card(tc, 26)
@@ -95,6 +96,9 @@ func _ready() -> void:
 
 	# Bottom left: controls, fades out.
 	_hint_card = _card(root)
+	if touch:
+		_hint_t = 0.0
+		_hint_card.visible = false
 	_hint_card.anchor_top = 1.0
 	_hint_card.anchor_bottom = 1.0
 	_hint_card.offset_left = 20

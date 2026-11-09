@@ -1,0 +1,53 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+env:
+  GODOT: 4.7.2-stable
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Godot + export templates
+        run: |
+          base=https://github.com/godotengine/godot/releases/download/$GODOT
+          curl -fsSLO $base/Godot_v${GODOT}_linux.x86_64.zip
+          curl -fsSLO $base/Godot_v${GODOT}_export_templates.tpz
+          curl -fsSLO $base/SHA512-SUMS.txt
+          grep -E " Godot_v${GODOT}_(linux.x86_64.zip|export_templates.tpz)$" SHA512-SUMS.txt | sha512sum -c -
+          unzip -q Godot_v${GODOT}_linux.x86_64.zip && sudo install -m755 Godot_v${GODOT}_linux.x86_64 /usr/local/bin/godot
+          T=~/.local/share/godot/export_templates/${GODOT/-/.}
+          mkdir -p $T && unzip -q -j Godot_v${GODOT}_export_templates.tpz -d $T
+          mkdir -p ~/.config/godot
+          printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/java_sdk_path = "%s"\nexport/android/android_sdk_path = "%s"\n' "$JAVA_HOME_17_X64" "$ANDROID_HOME" > ~/.config/godot/editor_settings-4.7.tres
+      - name: Version from tag
+        run: |
+          v=${GITHUB_REF_NAME#v}
+          IFS=. read -r ma mi pa <<< "$v"
+          code=$((ma * 10000 + mi * 100 + pa))
+          sed -i "s/^config\/version=.*/config\/version=\"$v\"/" project.godot
+          sed -i "s/^version\/name=.*/version\/name=\"$v\"/; s/^version\/code=.*/version\/code=$code/" export_presets.cfg
+      - name: Export
+        env:
+          KEYSTORE_B64: ${{ secrets.LOWGEAR_KEYSTORE_B64 }}
+          GODOT_ANDROID_KEYSTORE_RELEASE_USER: lowgear
+          GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: ${{ secrets.LOWGEAR_KEYSTORE_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > $RUNNER_TEMP/release.jks
+          export GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$RUNNER_TEMP/release.jks
+          mkdir -p export/linux export/windows export/android
+          godot --headless --path . --import || true
+          godot --headless --path . --export-release Linux export/linux/lowgear.x86_64
+          godot --headless --path . --export-release Windows export/windows/lowgear.exe
+          godot --headless --path . --export-release Android export/android/lowgear.apk
+          (cd export/windows && zip -q ../lowgear-windows.zip lowgear.exe)
+          rm -f $RUNNER_TEMP/release.jks
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --title "Lowgear $GITHUB_REF_NAME" --generate-notes \
+            export/linux/lowgear.x86_64 export/windows/lowgear.exe export/lowgear-windows.zip export/android/lowgear.apk
