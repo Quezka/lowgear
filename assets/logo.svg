@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9fb8ec"/>
+      <stop offset="0.55" stop-color="#f7c6d0"/>
+      <stop offset="0.8" stop-color="#ffd8b0"/>
+    </linearGradient>
+    <clipPath id="tile">
+      <rect x="32" y="32" width="960" height="960" rx="210"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect x="0" y="0" width="1024" height="1024" fill="url(#sky)"/>
+    <!-- sun -->
+    <circle cx="690" cy="420" r="168" fill="#fff1c9" opacity="0.55"/>
+    <circle cx="690" cy="420" r="122" fill="#fff4d6"/>
+    <!-- far hills -->
+    <polygon points="0,610 140,520 260,575 400,470 560,560 700,500 860,560 1024,500 1024,1024 0,1024" fill="#c3b1e8"/>
+    <polygon points="400,470 470,560 560,560" fill="#b19de0"/>
+    <polygon points="700,500 760,560 860,560" fill="#b19de0"/>
+    <!-- mid hills -->
+    <polygon points="0,700 180,630 330,690 520,610 700,680 880,640 1024,690 1024,1024 0,1024" fill="#9fd1a0"/>
+    <polygon points="520,610 600,700 700,680" fill="#8cc48f"/>
+    <polygon points="180,630 240,710 330,690" fill="#8cc48f"/>
+    <!-- near hill with facets -->
+    <polygon points="0,1024 0,800 250,700 470,640 640,700 840,800 1024,860 1024,1024" fill="#7dbb86"/>
+    <polygon points="250,700 470,640 420,820" fill="#8fca93"/>
+    <polygon points="470,640 640,700 560,860 420,820" fill="#6fae7e"/>
+    <polygon points="0,800 250,700 420,820 180,920" fill="#86c28c"/>
+    <polygon points="640,700 840,800 760,930 560,860" fill="#79b783"/>
+    <!-- dust -->
+    <circle cx="300" cy="650" r="34" fill="#fff4e6" opacity="0.75"/>
+    <circle cx="258" cy="628" r="24" fill="#fff4e6" opacity="0.55"/>
+    <circle cx="226" cy="660" r="16" fill="#fff4e6" opacity="0.4"/>
+    <!-- the car: a boxy 4x4 climbing the crest -->
+    <g transform="translate(470 652) rotate(-15)">
+      <rect x="-150" y="-118" width="292" height="78" rx="16" fill="#2b2d42"/>
+      <rect x="-118" y="-196" width="196" height="88" rx="18" fill="#2b2d42"/>
+      <rect x="-98" y="-178" width="70" height="52" rx="8" fill="#9fb8ec"/>
+      <rect x="-14" y="-178" width="74" height="52" rx="8" fill="#9fb8ec"/>
+      <rect x="-104" y="-214" width="168" height="16" rx="6" fill="#2b2d42"/>
+      <rect x="118" y="-102" width="26" height="22" rx="5" fill="#fff1c9"/>
+      <circle cx="-86" cy="-34" r="48" fill="#2b2d42"/>
+      <circle cx="78" cy="-34" r="48" fill="#2b2d42"/>
+      <circle cx="-86" cy="-34" r="20" fill="#f7c6d0"/>
+      <circle cx="78" cy="-34" r="20" fill="#f7c6d0"/>
+    </g>
+  </g>
+</svg>

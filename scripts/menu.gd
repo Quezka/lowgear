@@ -107,7 +107,14 @@ func _build_ui() -> void:
 	v.add_theme_constant_override("separation", 10)
 	panel.add_child(v)
 	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 16)
 	v.add_child(head)
+	var icon := TextureRect.new()
+	icon.texture = load("res://assets/lowgear_icon.png")
+	icon.custom_minimum_size = Vector2(84, 84)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	head.add_child(icon)
 	var tv := VBoxContainer.new()
 	tv.add_theme_constant_override("separation", 0)
 	tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -122,7 +129,8 @@ func _build_ui() -> void:
 	tv.add_child(sub)
 	var logo := TextureRect.new()
 	logo.texture = load("res://assets/logo.png")
-	logo.custom_minimum_size = Vector2(64, 64)
+	logo.custom_minimum_size = Vector2(40, 40)
+	logo.tooltip_text = "by Quezka"
 	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	logo.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
