@@ -53,35 +53,33 @@ func _build_scene() -> void:
 	day.env.fog_density = 0.012
 
 	var ground := MeshInstance3D.new()
-	ground.mesh = LowPoly.flat(LowPoly.cyl(9.0, 9.6, 0.4, 20))
-	ground.material_override = LowPoly.mat(Color("#a9d79c"))
+	ground.mesh = LowPoly.cyl(9.0, 9.6, 0.4, 48)
+	var gm := StandardMaterial3D.new()
+	gm.albedo_texture = load("res://assets/cc0/terrain/meadow_color.jpg")
+	gm.uv1_triplanar = true
+	gm.uv1_scale = Vector3(0.3, 0.3, 0.3)
+	gm.roughness = 0.95
+	gm.albedo_color = Color(1.2, 1.25, 1.05)
+	ground.material_override = gm
 	ground.position.y = -0.2
 	add_child(ground)
 	var field := MeshInstance3D.new()
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(600, 600)
 	field.mesh = plane
-	field.material_override = LowPoly.mat(Color("#8fc98a"))
+	field.material_override = gm
 	field.position.y = -0.4
 	add_child(field)
-	var trunk_mesh := Props.trunk()
-	var pine := Props.pine_crown()
-	var round_mesh := Props.round_crown()
+	var pine := Props.conifer_mesh()
+	var round_mesh := Props.broadleaf_mesh()
 	var spots := [
-		[Vector3(-6, 0, -9), true, "#93c4a6"], [Vector3(-11, 0, -4), false, "#f7c6d9"],
-		[Vector3(-2, 0, -13), true, "#84b59f"], [Vector3(5, 0, -12), false, "#ffd6a5"],
-		[Vector3(-16, 0, -14), true, "#a0cbb0"], [Vector3(10, 0, -18), true, "#7aa995"],
-		[Vector3(-9, 0, 6), false, "#cfe8a9"], [Vector3(14, 0, -6), false, "#f9dcc4"],
+		[Vector3(-10, 0, -18), true], [Vector3(-20, 0, -10), false], [Vector3(-2, 0, -26), true],
+		[Vector3(9, 0, -24), false], [Vector3(-26, 0, -28), true], [Vector3(18, 0, -34), true],
+		[Vector3(-16, 0, 10), false], [Vector3(24, 0, -14), false],
 	]
 	for s in spots:
-		var t := MeshInstance3D.new()
-		t.mesh = trunk_mesh
-		t.material_override = LowPoly.mat(Props.TRUNK_COL)
-		t.position = s[0]
-		add_child(t)
 		var c := MeshInstance3D.new()
 		c.mesh = pine if s[1] else round_mesh
-		c.material_override = LowPoly.mat(Color(str(s[2])))
 		c.position = s[0]
 		add_child(c)
 

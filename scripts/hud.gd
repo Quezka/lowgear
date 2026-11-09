@@ -4,7 +4,7 @@ extends CanvasLayer
 ## compass, toasts and the multiplayer roster.
 
 const CREAM := Color("#fff8f0")
-const SURFACES := ["Grass", "Sand", "Rock", "Snow", "Water"]
+const SURFACES := ["Grass", "Sand", "Rock", "Snow", "Water", "Mud", "Gravel"]
 
 var car: Car
 var feats: Collectibles

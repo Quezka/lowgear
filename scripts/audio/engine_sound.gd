@@ -1,71 +1,83 @@
 class_name EngineSound
-extends AudioStreamPlayer
-## Live engine note: pitch follows the fake gearbox rpm, timbre per car.
+extends Node
+## Engine, tyre rumble and slide hiss. Each is a short loop rendered once at start-up and
+## played back with pitch and volume following the car, so it costs almost no CPU per frame.
 
-const SR := 22050.0
+const SR := 22050
+const LOOP := 1.0
 
 var car: Car
-var base := 38.0
-var harsh := 0.5
-var _pb: AudioStreamGeneratorPlayback
-var _ph := 0.0
-var _ph2 := 0.0
-var _lp := 0.0
-var _amp := 0.0
-var _rumble_lp := 0.0
-var _hiss_lp := 0.0
-var _rumble_amp := 0.0
-var _hiss_amp := 0.0
-var _rng := RandomNumberGenerator.new()
+var _engine: AudioStreamPlayer
+var _rumble: AudioStreamPlayer
+var _hiss: AudioStreamPlayer
 
 
 func setup(c: Car) -> void:
 	car = c
 	var es: Dictionary = c.spec["engine_sound"]
-	base = es["base"]
-	harsh = es["harsh"]
-	var g := AudioStreamGenerator.new()
-	g.mix_rate = SR
-	g.buffer_length = 0.12
-	stream = g
-	apply_volume()
-	play()
-	_pb = get_stream_playback()
+	_engine = _player(_engine_loop(float(es["base"]), float(es["harsh"])))
+	_rumble = _player(_noise_loop(0.04, 7))
+	_hiss = _player(_noise_loop(-0.5, 8))
 
 
-func apply_volume() -> void:
-	volume_db = linear_to_db(maxf(float(GameState.settings["engine"]) * 0.9, 0.0001))
+func _player(stream: AudioStreamWAV) -> AudioStreamPlayer:
+	var p := AudioStreamPlayer.new()
+	p.stream = stream
+	p.volume_db = -60.0
+	add_child(p)
+	p.play()
+	return p
 
 
-func _process(_delta: float) -> void:
-	if not _pb or not car:
-		return
-	var n := _pb.get_frames_available()
-	if n <= 0:
-		return
-	var inc := base * (0.55 + car.rpm * 2.4) / SR
-	var target := 0.10 + 0.16 * car.throttle + 0.05 * car.rpm
-	var cutoff := 0.12 + 0.35 * car.throttle
-	var noise := 0.08 * car.throttle
-	# Tyres: low rumble from the ground (rougher on rock and sand), hiss when sliding.
-	var rough: float = [0.5, 0.75, 1.0, 0.35, 0.9][car.surface]
-	var speed := car.linear_velocity.length()
-	var rumble_target := clampf(speed / 20.0, 0.0, 1.0) * rough * 0.5 if car.grounded else 0.0
-	var hiss_target := clampf(car.skid * 1.4, 0.0, 1.0) * clampf(speed / 6.0, 0.0, 1.0) * 0.35
-	var buf := PackedVector2Array()
+## One second of engine note at base_hz: pulse + saw + sine. Whole cycles, so it loops cleanly.
+static func _engine_loop(base_hz: float, harsh: float) -> AudioStreamWAV:
+	var n := int(SR * LOOP)
+	var f := roundf(base_hz * LOOP) / LOOP
+	var buf := PackedFloat32Array()
 	buf.resize(n)
+	var lp := 0.0
 	for i in n:
-		_amp += (target - _amp) * 0.002
-		_ph = fmod(_ph + inc, 1.0)
-		_ph2 = fmod(_ph2 + inc * 0.5, 1.0)
-		var pulse := 1.0 if _ph2 < 0.35 else -0.6
-		var s := sin(_ph * TAU) * (1.0 - harsh) + (_ph * 2.0 - 1.0) * harsh * 0.6 + pulse * 0.25 + _rng.randf_range(-1.0, 1.0) * noise
-		_lp += (s - _lp) * cutoff
-		_rumble_amp += (rumble_target - _rumble_amp) * 0.001
-		_hiss_amp += (hiss_target - _hiss_amp) * 0.002
-		var nz := _rng.randf_range(-1.0, 1.0)
-		_rumble_lp += (nz - _rumble_lp) * 0.04
-		_hiss_lp += (nz - _hiss_lp) * 0.5
-		var v := _lp * _amp + _rumble_lp * _rumble_amp * 1.6 + (nz - _hiss_lp) * _hiss_amp
-		buf[i] = Vector2(v, v)
-	_pb.push_buffer(buf)
+		var ph := fmod(f * i / SR, 1.0)
+		var ph2 := fmod(f * 0.5 * i / SR, 1.0)
+		var pulse := 1.0 if ph2 < 0.35 else -0.6
+		var s := sin(ph * TAU) * (1.0 - harsh) + (ph * 2.0 - 1.0) * harsh * 0.6 + pulse * 0.25
+		lp += (s - lp) * 0.3
+		buf[i] = lp * 0.5
+	return AudioUtil.wav(AudioUtil.to_pcm(buf), SR, true)
+
+
+## Filtered noise loop: positive cutoff = low-pass (rumble), negative = high-pass (hiss).
+static func _noise_loop(cutoff: float, seed_value: int) -> AudioStreamWAV:
+	var n := int(SR * LOOP)
+	var buf := PackedFloat32Array()
+	buf.resize(n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	var lp := 0.0
+	var k := absf(cutoff)
+	for i in n:
+		var x := rng.randf_range(-1.0, 1.0)
+		lp += (x - lp) * k
+		buf[i] = (lp * 3.0 if cutoff > 0.0 else (x - lp)) * 0.5
+	var fade := 600
+	for i in fade:
+		var a := float(i) / fade
+		buf[i] = buf[i] * a + buf[n - fade + i] * (1.0 - a)
+	return AudioUtil.wav(AudioUtil.to_pcm(buf.slice(0, n - fade)), SR, true)
+
+
+func _process(delta: float) -> void:
+	if not car or not _engine:
+		return
+	var master := maxf(float(GameState.settings["engine"]), 0.0001)
+	var k := 1.0 - exp(-delta * 10.0)
+	_engine.pitch_scale = lerpf(_engine.pitch_scale, 0.55 + car.rpm * 2.4, k)
+	var eng := (0.25 + 0.5 * car.throttle + 0.15 * car.rpm) * master
+	_engine.volume_db = lerpf(_engine.volume_db, linear_to_db(maxf(eng, 0.0001)) - 4.0, k)
+	var rough: float = [0.5, 0.75, 1.0, 0.35, 0.9, 0.6, 0.85][car.surface]
+	var speed := car.linear_velocity.length()
+	var rum := clampf(speed / 20.0, 0.0, 1.0) * rough * master if car.grounded else 0.0
+	_rumble.volume_db = lerpf(_rumble.volume_db, linear_to_db(maxf(rum, 0.0001)) - 8.0, k)
+	_rumble.pitch_scale = 0.7 + clampf(speed / 30.0, 0.0, 0.8)
+	var hiss := clampf(car.skid * 1.4, 0.0, 1.0) * clampf(speed / 6.0, 0.0, 1.0) * master
+	_hiss.volume_db = lerpf(_hiss.volume_db, linear_to_db(maxf(hiss, 0.0001)) - 12.0, k)

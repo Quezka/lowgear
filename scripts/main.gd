@@ -2,21 +2,6 @@ extends Node3D
 ## The drive: builds the island, the car and the UI.
 
 const MENU := "res://scenes/menu.tscn"
-const GRAIN_SHADER := """
-shader_type canvas_item;
-uniform float grain = 0.045;
-uniform float vignette = 0.32;
-float rnd(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
-void fragment() {
-	float n = rnd(floor(FRAGCOORD.xy * 0.5) + fract(TIME * 7.0) * 113.0);
-	float d = distance(UV, vec2(0.5));
-	float v = smoothstep(0.42, 0.9, d) * vignette;
-	float a = grain + v;
-	vec3 col = mix(vec3(n), vec3(0.22, 0.16, 0.32), v / max(a, 0.001));
-	COLOR = vec4(col, a);
-}
-"""
-
 var spec: Dictionary
 var terrain: Terrain
 var feats: Collectibles
@@ -68,16 +53,19 @@ func _build() -> void:
 	add_child(day)
 	day.setup(we, sun, float(GameState.shot_args.get("tod", 0.34)))
 
+	var q := GameState.quality()
 	terrain = Terrain.new()
 	add_child(terrain)
-	terrain.generate()
-	_add_water()
+	terrain.generate_heights()
 	feats = Collectibles.new()
 	add_child(feats)
 	feats.build(terrain, terrain.spawn_transform)
+	terrain.add_tracks(feats.avoid_points())
+	terrain.build(q)
+	_add_water()
 	var props := Props.new()
 	add_child(props)
-	props.build(terrain, feats.avoid_points() + [terrain.spawn_transform.origin])
+	props.build(terrain, feats.avoid_points() + [terrain.spawn_transform.origin], q)
 
 	car = CarBuilder.build_vehicle(spec)
 	car.terrain = terrain
@@ -96,6 +84,13 @@ func _build() -> void:
 	add_child(cam)
 	cam.current = true
 	cam.snap()
+	cam.far = [500.0, 700.0, 900.0][q]
+	var grass := GrassField.new()
+	add_child(grass)
+	grass.setup(terrain, cam, q)
+	day.env.fog_density = [0.0045, 0.003, 0.0024][q]
+	sun.directional_shadow_max_distance = [0.0, 55.0, 90.0][q]
+	sun.shadow_enabled = sun.shadow_enabled and q > 0
 
 	hud = Hud.new()
 	hud.car = car
@@ -144,11 +139,10 @@ func _add_water() -> void:
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(5000, 5000)
 	water.mesh = pm
-	var m := StandardMaterial3D.new()
-	m.albedo_color = Color("#9fd6e8", 0.82)
-	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	m.roughness = 0.15
-	m.metallic_specular = 0.6
+	var m := ShaderMaterial.new()
+	m.shader = load("res://shaders/water.gdshader")
+	m.set_shader_parameter("heights", terrain.height_texture())
+	m.set_shader_parameter("map_half", Terrain.HALF)
 	water.material_override = m
 	water.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(water)
@@ -156,15 +150,13 @@ func _add_water() -> void:
 
 func _grain_layer() -> ColorRect:
 	var layer := CanvasLayer.new()
-	layer.layer = 3
+	layer.layer = 1
 	add_child(layer)
 	var r := ColorRect.new()
 	r.set_anchors_preset(Control.PRESET_FULL_RECT)
 	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var sh := Shader.new()
-	sh.code = GRAIN_SHADER
 	var m := ShaderMaterial.new()
-	m.shader = sh
+	m.shader = load("res://shaders/grade.gdshader")
 	r.material = m
 	r.visible = bool(GameState.settings["grain"])
 	layer.add_child(r)
@@ -192,7 +184,6 @@ func _loading_layer() -> CanvasLayer:
 func _apply_settings() -> void:
 	sun.shadow_enabled = bool(GameState.settings["shadows"])
 	grain.visible = bool(GameState.settings["grain"])
-	engine.apply_volume()
 
 
 func _process(delta: float) -> void:
@@ -288,6 +279,12 @@ func _shot_tick(delta: float) -> void:
 			_shot_t, car.gear_text(), car.low_range, car.engine_rpm, Engine.get_frames_per_second(), car.linear_velocity.length() * 3.6, car.fwd_speed,
 			car.global_position.x, car.global_position.y, car.global_position.z,
 			car.global_transform.basis.y.y, car.trip, car.resets, car.grounded])
+		print("[perf] process=%.1fms physics=%.1fms draws=%d prims=%dk objects=%d" % [
+			Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0,
+			Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0,
+			Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
+			int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME) / 1000),
+			Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME)])
 	if not _shot_times.is_empty() and _shot_t >= float(_shot_times[0]):
 		GameState.screenshot("%s_%02d.png" % [spec["id"], int(_shot_times[0])])
 		_shot_times.pop_front()

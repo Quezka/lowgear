@@ -1,5 +1,19 @@
 # Credits
 
-- Code, art, music and sounds: Quezka (all generated in code so far).
+- Code, logo, car models, music and sounds: Quezka (made in code).
 - Engine: [Godot Engine](https://godotengine.org) (MIT).
-- Future CC0 assets (Poly Haven, ambientCG) and map data (© OpenStreetMap contributors, public elevation data) will be listed here.
+
+## CC0 assets (public domain, from [ambientCG](https://ambientcg.com))
+| File in `assets/cc0/` | Source |
+|---|---|
+| terrain/meadow_* | Grass004 |
+| terrain/dirt_* | Ground037 |
+| terrain/sand_* | Ground054 |
+| terrain/gravel_* | Gravel043 |
+| terrain/rock_* | Rock058 |
+| terrain/snow_* | Snow010A |
+| terrain/bark_* | Bark014 |
+| foliage/broadleaf_cluster.png | built from LeafSet024 by `tools/make_foliage.py` |
+| foliage/conifer_branch.png, foliage/grass_clump.png | built from Foliage001 by `tools/make_foliage.py` |
+
+Map data for the upcoming real-place maps: © OpenStreetMap contributors, plus public elevation data (to be listed per map).

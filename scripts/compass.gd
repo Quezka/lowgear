@@ -45,6 +45,16 @@ func _draw() -> void:
 	draw_line(Vector2(size.x * 0.5, 2), Vector2(size.x * 0.5, 10), cream, 3.0)
 	if not feats:
 		return
+	var label_lm: Dictionary = {}
+	var label_diff := 0.22
+	for lm in feats.landmarks:
+		if lm["found"]:
+			continue
+		var dd: Vector3 = (lm["pos"] as Vector3) - cam.global_position
+		var df := absf(wrapf(atan2(dd.x, -dd.z) - heading, -PI, PI))
+		if df < label_diff:
+			label_diff = df
+			label_lm = lm
 	for lm in feats.landmarks:
 		if lm["found"]:
 			continue
@@ -57,7 +67,7 @@ func _draw() -> void:
 		var c: Color = lm["color"]
 		draw_circle(Vector2(x, h * 0.5), 11.0, dark)
 		draw_circle(Vector2(x, h * 0.5), 8.0, c)
-		if absf(wrapf(ang - heading, -PI, PI)) < 0.22:
+		if lm == label_lm:
 			var txt := "%s  %d m" % [lm["name"], int(Vector2(d.x, d.z).length())]
 			var pos := Vector2(x - 180, h + 30)
 			draw_string_outline(font, pos, txt, HORIZONTAL_ALIGNMENT_CENTER, 360, 24, 8, dark)

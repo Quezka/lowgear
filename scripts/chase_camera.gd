@@ -16,6 +16,7 @@ var _shake := 0.0
 
 
 func _ready() -> void:
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	fov = 68.0
 	near = 0.1
 	far = 900.0

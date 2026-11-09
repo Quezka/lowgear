@@ -5,13 +5,28 @@ extends VBoxContainer
 
 func _ready() -> void:
 	add_theme_constant_override("separation", 10)
+	_quality()
 	_check("Automatic gearbox", "auto_gearbox")
 	_check("Fullscreen", "fullscreen")
 	_check("Shadows", "shadows")
-	_check("Film grain", "grain")
+	_check("Soft film look", "grain")
 	_slider("Music", "music")
 	_slider("Engine", "engine")
 	_slider("Sounds", "sfx")
+
+
+func _quality() -> void:
+	var names := ["Low", "Medium", "High"]
+	var b := Button.new()
+	var refresh := func() -> void:
+		var auto := int(GameState.settings["quality"]) < 0
+		b.text = "Graphics: %s%s" % [names[GameState.quality()], " (auto)" if auto else ""]
+	refresh.call()
+	b.tooltip_text = "Applies the next time you start driving"
+	b.pressed.connect(func() -> void:
+		GameState.set_setting("quality", (GameState.quality() + 1) % 3)
+		refresh.call())
+	add_child(b)
 
 
 func _check(text: String, key: String) -> void:

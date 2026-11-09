@@ -21,6 +21,7 @@ var settings: Dictionary = {
 	"fullscreen": true,
 	"auto_gearbox": false,
 	"name": "Driver",
+	"quality": -1,
 	"last_ip": "",
 }
 
@@ -108,6 +109,16 @@ func save_game() -> void:
 	cf.set_value("game", "odometer", odometer)
 	cf.set_value("game", "settings", settings)
 	cf.save(SAVE_PATH)
+
+
+## 0 low, 1 medium, 2 high. -1 in the settings means "pick for this device".
+func quality() -> int:
+	if shot_args.has("quality"):
+		return clampi(int(shot_args["quality"]), 0, 2)
+	var q := int(settings.get("quality", -1))
+	if q >= 0:
+		return clampi(q, 0, 2)
+	return 0 if OS.has_feature("mobile") else 1
 
 
 func add_distance(id: String, metres: float) -> void:

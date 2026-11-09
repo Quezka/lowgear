@@ -207,13 +207,13 @@ func _part(parent: Node3D, body: StaticBody3D, kind: String, dims: Vector3, pos:
 			b.size = dims
 			shape = b
 		"cyl":
-			mesh = LowPoly.flat(LowPoly.cyl(dims.x, dims.y, dims.z, 8))
+			mesh = LowPoly.cyl(dims.x, dims.y, dims.z, 18)
 			var c := CylinderShape3D.new()
 			c.radius = maxf(dims.x, dims.y)
 			c.height = dims.z
 			shape = c
 		_:
-			mesh = LowPoly.flat(LowPoly.sphere(dims.x, dims.y, 8, 4))
+			mesh = LowPoly.sphere(dims.x, dims.y, 16, 8)
 			var s := SphereShape3D.new()
 			s.radius = dims.x
 			shape = s

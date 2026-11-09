@@ -22,7 +22,8 @@ func _ready() -> void:
 
 
 func check() -> void:
-	if _checked or GameState.server_mode or GameState.shot_mode or OS.has_feature("editor"):
+	var testing := GameState.shot_args.has("ota-test")
+	if _checked or GameState.server_mode or (GameState.shot_mode and not testing) or (OS.has_feature("editor") and not testing):
 		return
 	_checked = true
 	_http.request_completed.connect(_on_release, CONNECT_ONE_SHOT)
@@ -36,7 +37,9 @@ func _on_release(result: int, code: int, _headers: PackedStringArray, body: Pack
 	if not data is Dictionary:
 		return
 	var tag := str((data as Dictionary).get("tag_name", "")).trim_prefix("v")
-	if tag.is_empty() or not is_newer(tag, Net.version()):
+	var current := str(GameState.shot_args.get("fake-version", Net.version()))
+	print("[ota] latest=%s current=%s" % [tag, current])
+	if tag.is_empty() or not is_newer(tag, current):
 		return
 	for a in (data as Dictionary).get("assets", []):
 		_assets[str(a["name"])] = str(a["browser_download_url"])
@@ -44,6 +47,8 @@ func _on_release(result: int, code: int, _headers: PackedStringArray, body: Pack
 		return
 	latest = tag
 	update_available.emit(tag)
+	if GameState.shot_args.has("ota-test"):
+		install()
 
 
 static func is_newer(a: String, b: String) -> bool:
@@ -82,6 +87,7 @@ func install() -> void:
 	add_child(dl)
 	dl.request_completed.connect(func(result: int, code: int, _h: PackedStringArray, _b: PackedByteArray) -> void:
 		dl.queue_free()
+		print("[ota] download result=%d code=%d" % [result, code])
 		if result != HTTPRequest.RESULT_SUCCESS or code != 200:
 			progress.emit("Download failed, try again later")
 			DirAccess.remove_absolute(tmp)
@@ -100,6 +106,10 @@ func _swap_and_restart(exe: String, tmp: String) -> void:
 	if OS.get_name() != "Windows":
 		OS.execute("chmod", ["+x", exe])
 	progress.emit("Updated, restarting...")
+	print("[ota] replaced %s" % exe)
+	if GameState.shot_args.has("ota-test"):
+		get_tree().quit()
+		return
 	GameState.save_game()
 	OS.create_process(exe, [])
 	get_tree().quit()

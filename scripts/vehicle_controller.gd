@@ -9,9 +9,11 @@ signal message(text: String)
 const SHIFT_TIME := 0.25
 const EFFICIENCY := 0.85
 ## Grip and rolling resistance per Terrain.Surface: grass, sand, rock, snow, water.
-const GRIP := [1.0, 0.72, 1.12, 0.55, 0.6]
-const DRAG := [0.0, 0.05, 0.0, 0.02, 0.1]
-const DUST := [Color(0.72, 0.7, 0.58), Color(0.93, 0.86, 0.72), Color(0.8, 0.76, 0.86), Color(1, 1, 1), Color(0.85, 0.93, 1.0)]
+## Order: grass, sand, rock, snow, water, mud, gravel (Terrain.Surface).
+const GRIP := [0.95, 0.72, 1.1, 0.55, 0.6, 0.45, 1.05]
+const DRAG := [0.0, 0.05, 0.0, 0.02, 0.1, 0.12, 0.0]
+const DUST := [Color(0.62, 0.6, 0.48), Color(0.88, 0.8, 0.66), Color(0.72, 0.7, 0.74), Color(1, 1, 1),
+	Color(0.85, 0.93, 1.0), Color(0.42, 0.34, 0.26), Color(0.74, 0.72, 0.68)]
 
 var spec: Dictionary = {}
 var terrain: Terrain
