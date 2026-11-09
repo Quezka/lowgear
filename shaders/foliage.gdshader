@@ -16,7 +16,10 @@ void vertex() {
 
 void fragment() {
 	vec4 c = texture(tex, UV);
-	if (c.a < 0.5) {
+	// Fade out foliage right in front of the camera (dithered) so it never blocks the view.
+	float near_fade = smoothstep(2.5, 6.0, length(VERTEX));
+	float dither = fract(sin(dot(floor(FRAGCOORD.xy), vec2(12.9898, 78.233))) * 43758.5453);
+	if (c.a < 0.5 || dither > near_fade) {
 		discard;
 	}
 	ALBEDO = c.rgb * COLOR.rgb;

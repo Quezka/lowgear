@@ -18,6 +18,7 @@ func _ready() -> void:
 	_streams["trail"] = _bells([[84, 0.0], [88, 0.08], [91, 0.16], [96, 0.24]], 1.0)
 	_streams["discover"] = _bells([[72, 0.0], [76, 0.12], [79, 0.24], [84, 0.36], [88, 0.5]], 1.8)
 	_streams["reset"] = _whoosh(0.45)
+	_streams["grind"] = _grind(0.35)
 
 
 func play(sound: String, vol := 1.0) -> void:
@@ -56,4 +57,17 @@ func _whoosh(dur: float) -> AudioStreamWAV:
 		var t := float(i) / dur / SR
 		lp += (rng.randf_range(-1.0, 1.0) - lp) * (0.05 + 0.3 * t)
 		buf[i] = lp * sin(PI * t) * 0.5
+	return AudioUtil.wav(AudioUtil.to_pcm(buf), SR)
+
+
+func _grind(dur: float) -> AudioStreamWAV:
+	var n := int(dur * SR)
+	var buf := PackedFloat32Array()
+	buf.resize(n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 9
+	for i in n:
+		var t := float(i) / SR
+		var saw := fmod(t * 180.0, 1.0) * 2.0 - 1.0
+		buf[i] = (saw * 0.5 + rng.randf_range(-1.0, 1.0) * 0.5) * sin(PI * t / dur) * 0.4
 	return AudioUtil.wav(AudioUtil.to_pcm(buf), SR)

@@ -6,6 +6,9 @@
 ## Icons
 Material Symbols by Google (Apache License 2.0), in `assets/icons/` with the licence file.
 
+## Font
+Manrope (SIL Open Font License), in `assets/fonts/` with the licence file.
+
 ## CC0 assets (public domain, from [ambientCG](https://ambientcg.com))
 | File in `assets/cc0/` | Source |
 |---|---|

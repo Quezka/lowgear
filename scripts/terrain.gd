@@ -343,15 +343,21 @@ func _paint_track(pts: PackedVector3Array, mpp: float) -> void:
 
 # --- meshes ---------------------------------------------------------------------
 
-func build(q := 1) -> void:
-	quality = q
+## Normals, ground layers and mud. Call after add_tracks(), before placing sites.
+func prepare_surface() -> void:
 	var t0 := Time.get_ticks_msec()
 	_compute_normals()
 	_build_splat()
 	_build_mud()
 	print("[terrain] splat+normals %d ms" % (Time.get_ticks_msec() - t0))
+
+
+func build(q := 1) -> void:
+	quality = q
+	if not mud_img:
+		prepare_surface()
 	_material = _make_material()
-	t0 = Time.get_ticks_msec()
+	var t0 := Time.get_ticks_msec()
 	for cz in CHUNKS:
 		for cx in CHUNKS:
 			_build_chunk(cx, cz)
@@ -484,6 +490,11 @@ func _chunk_mesh(cx: int, cz: int, step: int) -> ArrayMesh:
 	var m := ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return m
+
+
+func set_rut_texture(t: Texture2D) -> void:
+	if _material:
+		_material.set_shader_parameter("rut_map", t)
 
 
 ## Heights as a float texture, for the water shader (depth colour and shore foam).

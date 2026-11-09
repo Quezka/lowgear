@@ -8,6 +8,7 @@ const SURFACES := ["Grass", "Sand", "Rock", "Snow", "Water", "Mud", "Gravel"]
 
 var car: Car
 var feats: Collectibles
+var sites: Sites
 var cam: Camera3D
 
 var _car_lbl: Label
@@ -26,6 +27,13 @@ var _toast_t := 0.0
 var _hint_t := 16.0
 var _mud_tip_t := 0.0
 var _engine_lbl: Label
+var _cargo_lbl: Label
+var _money: Label
+var _level: Label
+var _prompt: Label
+var _prompt_card: PanelContainer
+var _gauge: Gauge
+var _touch := false
 var _wheels_lbl: Label
 var _body_lbl: Label
 
@@ -50,16 +58,19 @@ func _ready() -> void:
 	_engine_lbl = _row(dmg, "oil_barrel", 20)
 	_wheels_lbl = _row(dmg, "tire_repair", 20)
 	_body_lbl = _row(dmg, "car_crash", 20)
+	_cargo_lbl = _row(tlv, "inventory_2", 20)
 
 	# Top right: progress and players.
 	var tr := _card(root)
 	_anchor_right(tr, 16)
 	var trv := _vbox(tr)
-	_coins = _row(trv, "paid", 26, CREAM, Color("#f6bd60"))
-	_views = _row(trv, "landscape", 26, CREAM, Color("#8ecae6"))
+	_money = _row(trv, "paid", 28, CREAM, Color("#9ed9c5"))
+	_level = _row(trv, "trophy", 22, CREAM, Color("#f6bd60"))
+	_coins = _row(trv, "star", 22, CREAM, Color("#f6bd60"))
+	_views = _row(trv, "landscape", 22, CREAM, Color("#8ecae6"))
 
 	_players_card = _card(root)
-	_anchor_right(_players_card, 118)
+	_anchor_right(_players_card, 190)
 	_players = _vbox(_players_card)
 	_players_card.visible = false
 
@@ -76,6 +87,7 @@ func _ready() -> void:
 
 	# Bottom right: instruments.
 	var touch := TouchControls.wanted()
+	_touch = touch
 	var gc := _card(root)
 	gc.anchor_left = 0.5 if touch else 1.0
 	gc.anchor_right = gc.anchor_left
@@ -85,9 +97,27 @@ func _ready() -> void:
 	gc.offset_bottom = -16
 	gc.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	gc.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	var gauge := Gauge.new()
-	gauge.car = car
-	gc.add_child(gauge)
+	_gauge = Gauge.new()
+	_gauge.car = car
+	gc.add_child(_gauge)
+	# Interaction prompt, above the toasts.
+	var pc := CenterContainer.new()
+	pc.anchor_right = 1.0
+	pc.anchor_top = 1.0
+	pc.anchor_bottom = 1.0
+	pc.offset_top = -270 if touch else -140
+	pc.offset_bottom = -210 if touch else -80
+	pc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(pc)
+	_prompt_card = _card(pc, 22)
+	var ph := HBoxContainer.new()
+	ph.add_theme_constant_override("separation", 10)
+	_prompt_card.add_child(ph)
+	var key := _text(ph, 24, Color("#f6bd60"))
+	key.text = "TAP" if touch else "T"
+	ph.add_child(Icons.rect("touch_app", 26, Color("#f6bd60")))
+	_prompt = _text(ph, 24)
+	_prompt_card.visible = false
 
 	# Bottom centre: toasts.
 	var tc := CenterContainer.new()
@@ -223,6 +253,27 @@ func _process(delta: float) -> void:
 		if not tips.is_empty():
 			toast("Stuck in mud?  " + "   ".join(tips))
 	_mud_tip_t -= delta
+	var dmg_row := _engine_lbl.get_parent().get_parent()
+	(dmg_row as Control).visible = minf(car.engine_health, minf(car.body_health, car.worst_wheel())) < 0.98
+	_surface.get_parent().visible = not _touch
+	_coins.get_parent().visible = not _touch
+	_views.get_parent().visible = not _touch
+	var cl := car.carrier_load()
+	if car.carrier() == null:
+		_cargo_lbl.get_parent().visible = false
+	else:
+		_cargo_lbl.get_parent().visible = true
+		var names: Array = []
+		for t in cl:
+			names.append(Cargo.type_name(t))
+		var slots := int(Cargo.bed(car.carrier_spec()).get("slots", 0))
+		_cargo_lbl.text = "%s  (%d/%d)" % ["Empty" if names.is_empty() else ", ".join(names), Cargo.used_slots(cl), slots]
+	_money.text = "$%d" % GameState.money()
+	_level.text = "Level %d  ·  %d%%" % [GameState.level(), int(GameState.level_progress() * 100)]
+	if sites:
+		var h := sites.hint(car)
+		_prompt_card.visible = h != "" and not GameState.ui_open
+		_prompt.text = h
 	_health(_engine_lbl, car.engine_health)
 	_health(_wheels_lbl, car.worst_wheel())
 	_health(_body_lbl, car.body_health)
@@ -242,6 +293,12 @@ func _health(l: Label, v: float) -> void:
 	var c := Color("#f28482") if v < 0.4 else (Color("#f6bd60") if v < 0.8 else Color(CREAM, 0.8))
 	l.label_settings.font_color = c
 	(l.get_parent().get_child(0) as CanvasItem).modulate = c
+
+
+func set_car(c: Car) -> void:
+	car = c
+	if _gauge:
+		_gauge.car = c
 
 
 func toast(text: String) -> void:

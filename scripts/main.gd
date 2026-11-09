@@ -13,8 +13,18 @@ var pause: PauseMenu
 var sun: DirectionalLight3D
 var grain: ColorRect
 var engine: EngineSound
+var sites: Sites
+var props: Props
+var tracks: TyreTracks
+var garage: GarageScreen
+var map: MapScreen
+var _joint: PinJoint3D
+var touch: TouchControls
 
 var _built := false
+var _slope_start := Vector3.INF
+var _scenario := ""
+var _step := 0
 var _lights_hint := false
 var _remotes: Dictionary = {}  ## peer id -> RemoteCar
 var _net_tick := 0
@@ -31,7 +41,9 @@ var _fps_n := 0
 
 
 func _ready() -> void:
-	spec = CarSpecs.get_spec(GameState.car_id)
+	if not GameState.owns(GameState.car_id) and not GameState.shot_mode:
+		GameState.car_id = "panda4x4"
+	spec = GameState.spec_for(GameState.car_id)
 	var loading := _loading_layer()
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -62,34 +74,30 @@ func _build() -> void:
 	add_child(feats)
 	feats.build(terrain, terrain.spawn_transform)
 	terrain.add_tracks(feats.avoid_points())
+	terrain.prepare_surface()
+	sites = Sites.new()
+	add_child(sites)
+	sites.place(terrain, terrain.spawn_transform, feats.landmarks)
 	terrain.build(q)
+	sites.build()
 	_add_water()
-	var props := Props.new()
+	props = Props.new()
 	add_child(props)
-	props.build(terrain, feats.avoid_points() + [terrain.spawn_transform.origin], q)
-
-	car = CarBuilder.build_vehicle(spec, GameState.garage_for(GameState.car_id))
-	car.terrain = terrain
-	var tracks := TyreTracks.new()
+	props.build(terrain, feats.avoid_points() + sites.avoid_points() + [terrain.spawn_transform.origin], q)
+	tracks = TyreTracks.new()
 	add_child(tracks)
-	car.tracks = tracks
-	car.anchors = func() -> Array:
-		return props.anchors + feats.anchors
-	add_child(car)
-	# In multiplayer each player starts a few metres to the side of the others.
-	var spawn := terrain.spawn_transform
-	if Net.active:
-		spawn.origin += spawn.basis.x * (Net.my_slot() * 5.0)
-		spawn.origin.y = terrain.get_height(spawn.origin.x, spawn.origin.z) + 1.2
-	car.global_transform = spawn
-	car.setup_wheels()
+	terrain.set_rut_texture(tracks.rut_tex)
 
 	cam = ChaseCamera.new()
-	cam.target = car
 	cam.terrain = terrain
 	add_child(cam)
 	cam.current = true
-	cam.snap()
+	# In multiplayer each player starts a few metres to the side of the others.
+	var spawn := terrain.spawn_transform
+	if Net.active:
+		spawn.origin += spawn.basis.x * (Net.my_slot() * 6.0)
+		spawn.origin.y = terrain.get_height(spawn.origin.x, spawn.origin.z) + 1.2
+	_spawn_vehicle(GameState.car_id, spawn)
 	cam.far = [500.0, 700.0, 900.0][q]
 	var grass := GrassField.new()
 	add_child(grass)
@@ -100,6 +108,7 @@ func _build() -> void:
 
 	hud = Hud.new()
 	hud.car = car
+	hud.sites = sites
 	hud.feats = feats
 	hud.cam = cam
 	add_child(hud)
@@ -108,29 +117,49 @@ func _build() -> void:
 	pause.change_car.connect(_to_menu)
 	grain = _grain_layer()
 	if TouchControls.wanted():
-		add_child(TouchControls.new())
-	engine = EngineSound.new()
-	add_child(engine)
-	engine.setup(car)
+		touch = TouchControls.new()
+		touch.car = car
+		touch.sites = sites
+		add_child(touch)
+	garage = GarageScreen.new()
+	add_child(garage)
+	garage.swap.connect(func(id: String) -> void:
+		var t := car.global_transform
+		t.origin.y += 1.5
+		t.basis = Basis(Vector3.UP, atan2(t.basis.z.x, t.basis.z.z))
+		_spawn_vehicle(id, t))
+	map = MapScreen.new()
+	map.terrain = terrain
+	map.sites = sites
+	map.feats = feats
+	map.car = car
+	map.remotes = _remotes
+	add_child(map)
+	map.setup()
+	sites.contract_done.connect(func(title: String, cash: int, xp: int) -> void:
+		Sfx.play("trail")
+		hud.toast("Job done: %s   +$%d  +%d XP" % [title, cash, xp])
+		if Net.active:
+			Net.announce("%s finished \"%s\"" % [GameState.settings["name"], title]))
 
 	feats.refuelling.connect(func(r: float) -> void:
 		if r < 0.995:
 			hud.toast("Refuelling and repairing  %d%%" % int(r * 100.0))
 		else:
 			hud.toast("Fuelled up and repaired"))
-	feats.coin_collected.connect(func(_n: int) -> void: Sfx.play("coin", 0.7))
+	feats.coin_collected.connect(func(_n: int) -> void:
+		Sfx.play("coin", 0.7)
+		GameState.reward(25, 5))
 	feats.trail_completed.connect(func() -> void:
 		Sfx.play("trail")
 		hud.toast("Coin trail complete"))
 	feats.discovered.connect(func(n: String, c: int) -> void:
 		Sfx.play("discover")
-		hud.toast("Discovered: %s   (%d / %d)" % [n, c, feats.landmarks.size()])
+		hud.toast("Discovered: %s   (%d / %d)   +$400" % [n, c, feats.landmarks.size()])
+		GameState.reward(400, 150)
+		map.reveal(car.global_position, 260.0)
 		if Net.active:
 			Net.announce("%s found the %s" % [GameState.settings["name"], n]))
-	car.message.connect(func(t: String) -> void: hud.toast(t))
-	car.was_reset.connect(func() -> void:
-		Sfx.play("reset", 0.6)
-		hud.flash())
 	GameState.settings_changed.connect(_apply_settings)
 	Net.announced.connect(func(t: String) -> void:
 		if not t.begins_with(str(GameState.settings["name"]) + " found"):
@@ -143,6 +172,73 @@ func _build() -> void:
 	_sync_remotes()
 	if GameState.shot_mode:
 		_setup_shot()
+
+
+## Builds (or swaps to) a vehicle, with its trailer if it has one.
+func _spawn_vehicle(id: String, xform: Transform3D) -> void:
+	if car:
+		if car.trailer:
+			car.trailer.queue_free()
+		car.queue_free()
+		if _joint:
+			_joint.queue_free()
+			_joint = null
+	if engine:
+		engine.queue_free()
+	GameState.car_id = id
+	spec = GameState.spec_for(id)
+	car = CarBuilder.build_vehicle(spec, GameState.garage_for(id))
+	car.terrain = terrain
+	car.tracks = tracks
+	car.anchors = func() -> Array:
+		return props.anchors + feats.anchors
+	add_child(car)
+	car.global_transform = xform
+	car.setup_wheels()
+	if spec.has("trailer"):
+		var ts: Dictionary = spec["trailer"]
+		var tr := CarBuilder.build_trailer(ts)
+		add_child(tr)
+		var off := (spec["hitch"] as Vector3) - (ts["hitch"] as Vector3)
+		tr.global_transform = Transform3D(xform.basis, xform * off)
+		_joint = PinJoint3D.new()
+		add_child(_joint)
+		_joint.global_position = xform * (spec["hitch"] as Vector3)
+		_joint.node_a = car.get_path()
+		_joint.node_b = tr.get_path()
+		car.trailer = tr
+		tr.spilled.connect(sites.spill)
+	car.spilled.connect(sites.spill)
+	car.message.connect(func(t: String) -> void: hud.toast(t))
+	car.was_reset.connect(func() -> void:
+		Sfx.play("reset", 0.6)
+		hud.flash())
+	cam.target = car
+	cam.snap()
+	if hud:
+		hud.set_car(car)
+	if map:
+		map.car = car
+	if touch:
+		touch.car = car
+	engine = EngineSound.new()
+	add_child(engine)
+	engine.setup(car)
+	_odo_last = 0.0
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not _built or GameState.ui_open:
+		return
+	if event.is_action_pressed("interact"):
+		var r := sites.interact(car)
+		if r == "garage":
+			car.repair(1.0)
+			car.refuel(10000.0)
+			garage.open()
+		elif r != "":
+			hud.toast(r)
+		get_viewport().set_input_as_handled()
 
 
 func _add_water() -> void:
@@ -261,6 +357,28 @@ func _setup_shot() -> void:
 	car.autopilot = true
 	car.awd_on = true
 	car._apply_traction()
+	if str(GameState.shot_args.get("scenario", "")) == "delivery":
+		car.autopilot = false
+		_scenario = "delivery"
+		return
+	if str(GameState.shot_args.get("scenario", "")) == "slope":
+		# Find a ~20 degree grass slope and park across it.
+		var best := Vector3.ZERO
+		for k in 4000:
+			var p := Vector3(randf_range(-350, 350), 0, randf_range(-350, 350))
+			var n := terrain.get_normal(p.x, p.z)
+			if terrain.get_height(p.x, p.z) > 3.0 and absf(n.y - 0.94) < 0.01 and terrain.mud_at(p.x, p.z) < 0.05:
+				best = p
+				break
+		var n := terrain.get_normal(best.x, best.z)
+		var down := Vector3(n.x, 0, n.z).normalized()
+		var across := down.cross(Vector3.UP)
+		best.y = terrain.get_height(best.x, best.z) + 1.0 + float(car.spec["wheel"]["y"])
+		car.global_transform = Transform3D(Basis.looking_at(-across, Vector3.UP), best)
+		car.autopilot = false
+		_slope_start = best
+		print("[shot] slope scenario at %s, slope %.1f deg" % [best, rad_to_deg(acos(n.y))])
+		return
 	if str(GameState.shot_args.get("scenario", "")) == "mud" and terrain.mud_pit != Vector3.INF:
 		# Line up 14 m before the mud pit, pointing through it.
 		var pts: PackedVector3Array = terrain.tracks[0]
@@ -287,6 +405,32 @@ func _setup_shot() -> void:
 	print("[shot] car=%s spawn=%s landmarks=%d coins=%d" % [spec["id"], sp, feats.landmarks.size(), feats.total_coins])
 
 
+## Scripted job: three pallets from the warehouse to the farm, checking money and contract state.
+func _delivery_step() -> void:
+	var steps := [0.5, 1.5, 2.5, 3.5, 4.5, 5.5]
+	if _step >= steps.size() or _shot_t < float(steps[_step]):
+		return
+	var place := func(id: String) -> void:
+		var p: Vector3 = sites.sites[id]["pos"]
+		car._teleport(Transform3D(Basis.IDENTITY, p + Vector3(0, 2.5, 0)))
+	match _step:
+		0:
+			_spawn_vehicle("bastion", car.global_transform)
+		1:
+			place.call("warehouse")
+		2:
+			for k in 3:
+				print("[delivery] ", sites.interact(car))
+			print("[delivery] load=%s mass=%.0f money=%d" % [car.carrier_load(), car.mass, GameState.money()])
+			place.call("farm")
+		3:
+			print("[delivery] ", sites.interact(car))
+			print("[delivery] load=%s money=%d farm_done=%s" % [car.carrier_load(), GameState.money(), sites.contract_state("farm")["done"]])
+		4:
+			print("[delivery] active jobs: ", sites.active_contracts().map(func(c: Dictionary) -> String: return c["id"]))
+	_step += 1
+
+
 func _remote_summary() -> String:
 	var parts: Array = []
 	for id in _remotes:
@@ -302,9 +446,15 @@ func _shot_tick(delta: float) -> void:
 	if _shot_targets.size() > 1 and car.global_position.distance_to(_shot_targets[0]) < 18.0:
 		_shot_targets.pop_front()
 		car.auto_target = _shot_targets[0]
+	if _scenario == "delivery":
+		_delivery_step()
 	_stat_t += delta
 	if _stat_t >= 2.0:
 		_stat_t = 0.0
+		if _slope_start != Vector3.INF:
+			var bb := car.global_transform.basis
+			print("[shot] slope drift %.2f m lat=%.2f lon=%.2f up=%.2f contacts=%d speed=%.2f" % [Vector2(car.global_position.x - _slope_start.x, car.global_position.z - _slope_start.z).length(),
+				car.linear_velocity.dot(bb.x), car.linear_velocity.dot(bb.z), bb.y.y, car.wheels.filter(func(w: VehicleWheel3D) -> bool: return w.is_in_contact()).size(), car.linear_velocity.length()])
 		print("[shot] sink=%.2f surface=%d fuel=%.1f awd=%s diff=%s winch=%s" % [car.sink, car.surface, car.fuel, car.awd_on, car.diff_locked, car.winch_anchor != Vector3.INF])
 		print("[shot] t=%.0f gear=%s low=%s rpm=%.0f fps=%d kmh=%.0f fwd=%.1f pos=(%.0f, %.0f, %.0f) up=%.2f trip=%.0f resets=%d ground=%s" % [
 			_shot_t, car.gear_text(), car.low_range, car.engine_rpm, Engine.get_frames_per_second(), car.linear_velocity.length() * 3.6, car.fwd_speed,

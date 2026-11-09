@@ -36,7 +36,8 @@ func _draw() -> void:
 		var a := START + SWEEP * i / 7.0
 		var dir := Vector2(cos(a), sin(a))
 		draw_line(c + dir * (r - 24.0), c + dir * (r - 14.0), Color(CREAM, 0.7), 2.0)
-	draw_string(font, Vector2(c.x - 60, c.y + 26), car.gear_text(), HORIZONTAL_ALIGNMENT_CENTER, 120, 76, CREAM)
+	var gt := car.gear_text()
+	draw_string(font, Vector2(c.x - 70, c.y + (26 if gt.length() < 3 else 16)), gt, HORIZONTAL_ALIGNMENT_CENTER, 140, 76 if gt.length() < 3 else 44, CREAM if gt != "OFF" else CORAL)
 	var kmh := "%d" % int(absf(car.fwd_speed) * 3.6)
 	draw_string(font, Vector2(c.x - 60, c.y + 74), kmh, HORIZONTAL_ALIGNMENT_CENTER, 120, 34, CREAM)
 	draw_string(font, Vector2(c.x - 60, c.y + 98), "km/h", HORIZONTAL_ALIGNMENT_CENTER, 120, 18, Color(CREAM, 0.75))
@@ -47,6 +48,8 @@ func _draw() -> void:
 		chips.append(["AWD", Color("#9ed9c5")])
 	if car.diff_locked:
 		chips.append(["DIFF", Color("#f28482")])
+	if car.manual_clutch() and car.clutch < 0.5:
+		chips.append(["CL", Color("#8ecae6")])
 	if car.parking:
 		chips.append(["P", Color("#f28482")])
 	chips.append(["AUTO" if car.is_auto() else "MAN", Color("#b8a1e3")])

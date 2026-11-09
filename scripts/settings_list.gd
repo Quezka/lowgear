@@ -7,13 +7,26 @@ func _ready() -> void:
 	add_theme_constant_override("separation", 10)
 	_quality()
 	_check("Automatic gearbox", "auto_gearbox")
+	_check("Manual clutch (Shift)", "manual_clutch")
 	if not OS.has_feature("mobile"):
 		_check("Fullscreen", "fullscreen")
 	_check("Shadows", "shadows")
 	_check("Soft film look", "grain")
+	_slider("Interface size", "ui_scale", 0.75, 1.5)
 	_slider("Music", "music")
 	_slider("Engine", "engine")
 	_slider("Sounds", "sfx")
+	if not OS.has_feature("editor"):
+		var up := Button.new()
+		up.text = "Check for updates"
+		up.icon = Icons.tex("refresh", 48)
+		up.pressed.connect(func() -> void:
+			up.text = "Checking..."
+			Updater.checked.connect(func(found: bool) -> void:
+				up.text = "Update %s found: see the main menu" % Updater.latest if found else "You have the latest version (%s)" % Net.version(),
+				CONNECT_ONE_SHOT)
+			Updater.check_now())
+		add_child(up)
 
 
 func _quality() -> void:
@@ -38,7 +51,7 @@ func _check(text: String, key: String) -> void:
 	add_child(c)
 
 
-func _slider(text: String, key: String) -> void:
+func _slider(text: String, key: String, lo := 0.0, hi := 1.0) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 16)
 	var l := Label.new()
@@ -46,8 +59,8 @@ func _slider(text: String, key: String) -> void:
 	l.custom_minimum_size = Vector2(130, 0)
 	row.add_child(l)
 	var s := HSlider.new()
-	s.min_value = 0.0
-	s.max_value = 1.0
+	s.min_value = lo
+	s.max_value = hi
 	s.step = 0.05
 	s.value = float(GameState.settings[key])
 	s.size_flags_horizontal = Control.SIZE_EXPAND_FILL

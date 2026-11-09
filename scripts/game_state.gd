@@ -2,6 +2,15 @@ extends Node
 ## Save data, settings, input map, shared UI theme and the screenshot test mode.
 
 signal settings_changed
+signal career_changed
+
+const XP_PER_LEVEL := 1000
+const START_OWNED := ["panda4x4", "niva", "mini_rally"]
+## Upgrade prices; trucks pay double for tyres.
+const TYRE_PRICE := {"highway": 0, "allroad": 400, "mud": 900, "chains": 700}
+const SNORKEL_PRICE := 1200
+const ENGINE_PRICE := 2500
+const TANK_PRICE := 1000
 
 const SAVE_PATH := "user://save.cfg"
 const DARK := Color("#2b2d42")
@@ -12,6 +21,9 @@ var car_id: String = "panda4x4"
 var coins: Dictionary = {}
 var viewpoints: Dictionary = {}
 var odometer: Dictionary = {}
+var career: Dictionary = {"money": 3000, "xp": 0, "owned": START_OWNED.duplicate(), "maps": {}}
+var map_id := "island"
+var waypoint := Vector3.INF
 var settings: Dictionary = {
 	"music": 0.7,
 	"sfx": 0.9,
@@ -20,8 +32,11 @@ var settings: Dictionary = {
 	"shadows": true,
 	"fullscreen": true,
 	"auto_gearbox": false,
+	"manual_clutch": false,
 	"name": "Driver",
 	"quality": -1,
+	"ui_scale": 1.0,
+	"cam_zoom": -1.0,
 	"garage": {},
 	"last_ip": "",
 }
@@ -36,8 +51,16 @@ var shot_args: Dictionary = {}
 var _theme: Theme
 
 
+var font_regular: Font
+var font_bold: Font
+
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# Manrope (OFL), the same face as the other Quezka apps, everywhere.
+	font_regular = load("res://assets/fonts/Manrope-SemiBold.ttf")
+	font_bold = load("res://assets/fonts/Manrope-Bold.ttf")
+	ThemeDB.fallback_font = font_regular
 	_setup_input()
 	load_game()
 	_parse_args()
@@ -58,6 +81,7 @@ func _parse_args() -> void:
 func apply_window() -> void:
 	if server_mode:
 		return
+	get_window().content_scale_factor = clampf(float(settings.get("ui_scale", 1.0)), 0.75, 1.5)
 	if shot_mode:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 		DisplayServer.window_set_size(Vector2i(1366, 768))
@@ -70,7 +94,7 @@ func apply_window() -> void:
 
 func set_setting(key: String, value: Variant) -> void:
 	settings[key] = value
-	if key == "fullscreen":
+	if key == "fullscreen" or key == "ui_scale":
 		apply_window()
 	settings_changed.emit()
 
@@ -95,6 +119,13 @@ func load_game() -> void:
 	coins = cf.get_value("game", "coins", {})
 	viewpoints = cf.get_value("game", "viewpoints", {})
 	odometer = cf.get_value("game", "odometer", {})
+	var c: Dictionary = cf.get_value("game", "career", {})
+	for k in c:
+		career[k] = c[k]
+	if c.is_empty():
+		# Saves from before the career: pay out what was already collected.
+		career["money"] = 3000 + coins.size() * 25 + viewpoints.size() * 400
+		career["xp"] = coins.size() * 5 + viewpoints.size() * 150
 	var s: Dictionary = cf.get_value("game", "settings", {})
 	for k in s:
 		settings[k] = s[k]
@@ -108,15 +139,95 @@ func save_game() -> void:
 	cf.set_value("game", "coins", coins)
 	cf.set_value("game", "viewpoints", viewpoints)
 	cf.set_value("game", "odometer", odometer)
+	cf.set_value("game", "career", career)
 	cf.set_value("game", "settings", settings)
 	cf.save(SAVE_PATH)
 
 
-## Per-vehicle setup chosen in the menu: {"tyres": String, "snorkel": bool}.
+## Per-vehicle setup: equipped tyres and snorkel, plus what has been bought.
 func garage_for(id: String) -> Dictionary:
 	var spec := CarSpecs.get_spec(id)
 	var g: Dictionary = (settings.get("garage", {}) as Dictionary).get(id, {})
-	return {"tyres": str(g.get("tyres", spec.get("tyres", "allroad"))), "snorkel": bool(g.get("snorkel", false))}
+	var stock := str(spec.get("tyres", "allroad"))
+	return {
+		"tyres": str(g.get("tyres", stock)),
+		"owned_tyres": g.get("owned_tyres", [stock]),
+		"snorkel": bool(g.get("snorkel", false)),
+		"has_snorkel": bool(g.get("has_snorkel", false)),
+		"engine": bool(g.get("engine", false)),
+		"tank": bool(g.get("tank", false)),
+	}
+
+
+## The vehicle's spec with its bought upgrades applied (engine, tank).
+func spec_for(id: String) -> Dictionary:
+	var spec := CarSpecs.get_spec(id).duplicate(true)
+	var g := garage_for(id)
+	if g["engine"]:
+		spec["drivetrain"]["torque"] = float(spec["drivetrain"]["torque"]) * 1.18
+	if g["tank"]:
+		spec["fuel"] = float(spec["fuel"]) * 1.5
+	return spec
+
+
+# --- career -------------------------------------------------------------------
+
+func money() -> int:
+	return int(career.get("money", 0))
+
+
+func level() -> int:
+	return 1 + int(career.get("xp", 0)) / XP_PER_LEVEL
+
+
+func level_progress() -> float:
+	return float(int(career.get("xp", 0)) % XP_PER_LEVEL) / XP_PER_LEVEL
+
+
+func owns(id: String) -> bool:
+	return (career.get("owned", START_OWNED) as Array).has(id)
+
+
+func reward(cash: int, xp: int) -> void:
+	var before := level()
+	career["money"] = money() + cash
+	career["xp"] = int(career.get("xp", 0)) + xp
+	career_changed.emit()
+	if level() > before:
+		Sfx.play("discover")
+	save_game()
+
+
+## Spends money if there is enough; returns whether it did.
+func spend(cash: int) -> bool:
+	if money() < cash:
+		return false
+	career["money"] = money() - cash
+	career_changed.emit()
+	save_game()
+	return true
+
+
+func buy_vehicle(id: String) -> String:
+	var spec := CarSpecs.get_spec(id)
+	if owns(id):
+		return "You already own it"
+	if level() < int(spec.get("level", 1)):
+		return "Needs level %d" % int(spec["level"])
+	if not spend(int(spec.get("price", 0))):
+		return "Not enough money"
+	(career["owned"] as Array).append(id)
+	save_game()
+	return ""
+
+
+## Per-map progress: {"contracts": {id: {"got": {type: n}, "done": bool, "runs": int}}, "built": [], "fog": String}
+func map_state() -> Dictionary:
+	var maps: Dictionary = career.get("maps", {})
+	if not maps.has(map_id):
+		maps[map_id] = {"contracts": {}, "built": [], "fog": ""}
+	career["maps"] = maps
+	return maps[map_id]
 
 
 func set_garage(id: String, key: String, value: Variant) -> void:
@@ -157,6 +268,13 @@ func _setup_input() -> void:
 	_keys("shift_up", [KEY_E, KEY_PAGEUP])
 	_keys("shift_down", [KEY_Q, KEY_PAGEDOWN])
 	_keys("low_range", [KEY_L])
+	_keys("clutch", [KEY_SHIFT])
+	_keys("zoom_in", [KEY_EQUAL, KEY_KP_ADD])
+	_keys("zoom_out", [KEY_MINUS, KEY_KP_SUBTRACT])
+	_keys("interact", [KEY_T, KEY_ENTER])
+	_keys("map", [KEY_M, KEY_TAB])
+	_button("interact", JOY_BUTTON_B)
+	_button("map", JOY_BUTTON_BACK)
 	_keys("lights", [KEY_F])
 	_keys("hazards", [KEY_Y])
 	_button("lights", JOY_BUTTON_LEFT_STICK)
@@ -217,6 +335,7 @@ func _button(action: String, button: JoyButton) -> void:
 func label_settings(size: int, on_panel := false, color := Color.TRANSPARENT) -> LabelSettings:
 	var ls := LabelSettings.new()
 	ls.font_size = size
+	ls.font = font_bold if size >= 30 else font_regular
 	if on_panel:
 		ls.font_color = DARK if color == Color.TRANSPARENT else color
 	else:
@@ -231,6 +350,7 @@ func ui_theme() -> Theme:
 		return _theme
 	var t := Theme.new()
 	t.default_font_size = 28
+	t.default_font = font_regular
 	for type in ["Button", "CheckButton"]:
 		t.set_stylebox("normal", type, _box(Color("#fff4e6")))
 		t.set_stylebox("hover", type, _box(Color("#ffe1cc")))

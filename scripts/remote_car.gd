@@ -40,7 +40,7 @@ func setup(id: int, info: Dictionary, tint: Color) -> void:
 		var pivot := Node3D.new()
 		pivot.position = positions[i] - Vector3(0, _drop, 0)
 		add_child(pivot)
-		var wv := CarBuilder.build_wheel_visual(spec)
+		var wv := CarBuilder.build_wheel_visual(spec, {}, CarBuilder.axle_radius(spec, i / 2))
 		pivot.add_child(wv)
 		_spinners.append(wv)
 		if bool((axles[i / 2] as Dictionary)["steer"]):

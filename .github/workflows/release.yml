@@ -49,5 +49,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --title "Lowgear $GITHUB_REF_NAME" --generate-notes \
+          v=${GITHUB_REF_NAME#v}
+          awk -v v="## $v" '$0==v{f=1;next} /^## /{f=0} f' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "Lowgear $v" > notes.md
+          gh release create "$GITHUB_REF_NAME" --title "Lowgear $GITHUB_REF_NAME" --notes-file notes.md \
             export/linux/lowgear.x86_64 export/windows/lowgear.exe export/lowgear-windows.zip export/android/lowgear.apk

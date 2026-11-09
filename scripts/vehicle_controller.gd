@@ -5,6 +5,7 @@ extends VehicleBody3D
 
 signal was_reset
 signal message(text: String)
+signal spilled(at: Vector3, load: Array)
 
 const SHIFT_TIME := 0.25
 const EFFICIENCY := 0.85
@@ -25,6 +26,12 @@ var rear: Array[VehicleWheel3D] = []
 var lights: Array[SpotLight3D] = []
 var lamp_mats := {"tail": [], "light": [], "reverse": [], "amber": []}
 var paint_mats: Array = []
+var cargo_holder: Node3D
+var load: Array = []
+var trailer: Trailer
+var _base_mass := 1000.0
+var _base_com := Vector3.ZERO
+var _drive_radius := 0.3
 
 var gear := 1          ## -1 reverse, 0 neutral, 1..n
 var low_range := false
@@ -33,6 +40,8 @@ var diff_locked := false
 var engine_on := true
 var fuel := 30.0
 var engine_rpm := 900.0
+var clutch := 1.0       ## 0 = pedal down (disengaged), 1 = engaged
+var _clutch_pedal := 0.0
 var throttle := 0.0
 var rpm := 0.2
 var fwd_speed := 0.0
@@ -76,6 +85,7 @@ var _prev_vel := Vector3.ZERO
 var _was_contact: Array = []
 var _redline_t := 0.0
 var _smoke: CPUParticles3D
+var _mud_spray: CPUParticles3D
 var _frames := 0
 var _dmg_t := 0.0
 
@@ -83,6 +93,9 @@ var _dmg_t := 0.0
 func setup_wheels() -> void:
 	_dt = spec["drivetrain"]
 	engine_rpm = _dt["idle"]
+	_base_mass = spec["mass"]
+	_base_com = spec["com"]
+	_drive_radius = CarBuilder.axle_radius(spec, (spec["axles"] as Array).size() - 1)
 	_tyres = str(garage.get("tyres", spec.get("tyres", "allroad")))
 	fuel = float(spec["fuel"])
 	awd_on = spec["awd"] != "switchable"
@@ -108,6 +121,16 @@ func setup_wheels() -> void:
 	_make_dust()
 	_make_exhaust()
 	_make_splash()
+	_mud_spray = _puffs(60, 0.9, Color(0.24, 0.17, 0.11, 1.0), 0.22)
+	_mud_spray.position = Vector3(0, -0.2, float(((spec["axles"] as Array)[-1] as Dictionary)["z"]) - 0.2)
+	_mud_spray.emission_box_extents = Vector3(float((spec["wheel"] as Dictionary)["x"]), 0.1, 0.3)
+	_mud_spray.direction = Vector3(0, 0.9, -1)
+	_mud_spray.spread = 30.0
+	_mud_spray.gravity = Vector3(0, -9.8, 0)
+	_mud_spray.initial_velocity_min = 2.0
+	_mud_spray.scale_amount_curve = null
+	_mud_spray.scale_amount_min = 0.5
+	_mud_spray.scale_amount_max = 1.3
 	_smoke = _puffs(16, 1.6, Color(0.25, 0.25, 0.27, 0.5), 0.6)
 	_smoke.position = Vector3(0, float((spec["collision"][0][1] as Vector3).y) + 0.6, float(spec["axles"][0]["z"]))
 	_smoke.direction = Vector3(0, 1, 0)
@@ -170,6 +193,10 @@ func _torque(r: float) -> float:
 	return peak * (1.0 - 0.45 * f * f)
 
 
+func manual_clutch() -> bool:
+	return not autopilot and not is_auto() and bool(GameState.settings.get("manual_clutch", false))
+
+
 func _shift(to: int) -> void:
 	to = clampi(to, -1, gear_count())
 	if to == gear:
@@ -177,8 +204,12 @@ func _shift(to: int) -> void:
 	if to < 0 and fwd_speed > 1.5:
 		message.emit("Stop before reverse")
 		return
+	if manual_clutch() and _clutch_pedal < 0.6:
+		Sfx.play("grind", 0.8)
+		message.emit("Press the clutch (Shift) to change gear")
+		return
 	gear = to
-	_shift_t = SHIFT_TIME
+	_shift_t = 0.0 if manual_clutch() else SHIFT_TIME
 
 
 func _toggle_low() -> void:
@@ -230,6 +261,7 @@ func ignition() -> void:
 		message.emit("Get the air intake out of the water first")
 		return
 	engine_on = true
+	engine_rpm = float(_dt["idle"])
 	message.emit("Engine started")
 
 
@@ -290,6 +322,7 @@ func _physics_process(delta: float) -> void:
 		gas = Input.get_action_strength("gas")
 		brk = Input.get_action_strength("brake")
 		steer_in = Input.get_action_strength("left") - Input.get_action_strength("right")
+		_clutch_pedal = Input.get_action_strength("clutch")
 		if Input.is_action_just_pressed("handbrake"):
 			parking = not parking
 		if Input.is_action_just_pressed("lights"):
@@ -327,7 +360,7 @@ func _physics_process(delta: float) -> void:
 
 	var red: float = _dt["redline"]
 	var idle: float = _dt["idle"]
-	var radius: float = (spec["wheel"] as Dictionary)["radius"]
+	var radius := _drive_radius
 	var brake_max: float = spec["brake"]
 
 	if is_auto():
@@ -348,22 +381,56 @@ func _physics_process(delta: float) -> void:
 		gas = 0.0
 
 	var ratio := _ratio()
-	var wheel_rpm := absf(fwd_speed) / (TAU * radius) * 60.0
-	var linked := wheel_rpm * absf(ratio)
 	_shift_t = maxf(0.0, _shift_t - delta)
-	var clutch_in := ratio == 0.0 or _shift_t > 0.0 or not engine_on
-	var target_rpm: float
-	if not engine_on:
-		target_rpm = 0.0
-	elif clutch_in:
-		target_rpm = idle + gas * (red - idle) * 0.85
+	# Clutch output speed in engine rpm (what the engine would turn at if the clutch were locked).
+	var shaft := fwd_speed / (TAU * radius) * 60.0 * ratio
+	var peak: float = _dt["torque"]
+	var inertia: float = _dt.get("inertia", maxf(0.12, peak / 600.0))
+	# Clutch engagement: the player's foot, or an automatic clutch that launches and shifts.
+	var target_c := 0.0
+	if manual_clutch():
+		target_c = 1.0 - _clutch_pedal
+	elif ratio != 0.0 and _shift_t <= 0.0 and engine_on:
+		var launch: float = idle + 0.45 * (float(_dt["peak_rpm"]) - idle)
+		target_c = clampf((engine_rpm - idle * 1.05) / maxf(launch - idle * 1.05, 1.0), 0.0, 1.0)
+		if absf(shaft) > idle * 1.15:
+			target_c = 1.0
+		# Lugging: slip the clutch rather than drag the engine below idle.
+		if engine_rpm < idle * 0.95 and absf(shaft) < idle:
+			target_c = minf(target_c, 0.6)
+	clutch = move_toward(clutch, target_c, delta * (12.0 if target_c < clutch else 5.0))
+	if ratio == 0.0:
+		clutch = 0.0
+	# Engine torque: throttle, idle governor, rev limiter, internal friction (engine braking).
+	var thr := gas
+	if engine_on and engine_rpm < idle:
+		thr = maxf(thr, clampf((idle - engine_rpm) / 250.0, 0.0, 0.4))
+	if engine_rpm > red:
+		thr = 0.0
+	var t_comb := _torque(engine_rpm) * thr * lerpf(0.45, 1.0, engine_health) if engine_on else 0.0
+	var t_fric := (0.05 + 0.1 * clampf(engine_rpm / red, 0.0, 1.2)) * peak * signf(engine_rpm)
+	var t_cap := clutch * peak * 1.7
+	var t_wheel := 0.0
+	var slip_rpm := engine_rpm - shaft
+	var lock_ok := manual_clutch() or engine_rpm > idle * 0.9 or not engine_on
+	if lock_ok and clutch > 0.97 and absf(slip_rpm) < 150.0 and absf(t_comb - t_fric) < t_cap:
+		# Locked: the engine turns with the wheels and its torque goes straight through.
+		engine_rpm = shaft
+		t_wheel = t_comb - t_fric
 	else:
-		var launch: float = idle + gas * (float(_dt["peak_rpm"]) - idle) * 0.85
-		target_rpm = maxf(linked, launch if gas > 0.05 else idle)
-		if not grounded:
-			target_rpm = maxf(target_rpm, idle + gas * (red - idle) * 0.9)
-	engine_rpm = lerpf(engine_rpm, minf(target_rpm, red * 1.02), 1.0 - exp(-delta * 10.0))
-	rpm = engine_rpm / red
+		var t_c := clampf(slip_rpm * peak * 0.02, -t_cap, t_cap)
+		t_wheel = t_c
+		engine_rpm += (t_comb - t_fric - t_c) / inertia * delta * 60.0 / TAU
+	if not engine_on and clutch < 0.5:
+		engine_rpm = move_toward(engine_rpm, 0.0, delta * 2500.0)
+	if engine_on and not manual_clutch():
+		engine_rpm = maxf(engine_rpm, idle * 0.85)
+	engine_rpm = clampf(engine_rpm, -idle, red * 1.06)
+	if engine_on and manual_clutch() and engine_rpm < idle * 0.45 and clutch > 0.5:
+		engine_on = false
+		message.emit("Stalled! Press the clutch, then I to restart" if manual_clutch() else "Stalled! Press I to restart")
+	rpm = maxf(engine_rpm, 0.0) / red
+	var linked := absf(shaft)
 
 	if is_auto() and gear > 0 and _shift_t <= 0.0 and grounded:
 		if linked > red * 0.9 and gear < gear_count():
@@ -376,11 +443,8 @@ func _physics_process(delta: float) -> void:
 
 	var force := 0.0
 	var brake_v := brk * brake_max
-	if not clutch_in:
-		if linked < red:
-			force = _torque(engine_rpm) * gas * ratio * EFFICIENCY / radius * lerpf(0.45, 1.0, engine_health)
-		if gas < 0.05:
-			brake_v += clampf(linked / red, 0.0, 1.0) * absf(ratio) * 0.012 * brake_max
+	if ratio != 0.0:
+		force = t_wheel * ratio * EFFICIENCY / radius
 	brake_v += brake_max * 0.015
 
 	# Per-wheel: grip from tyre and ground, mud sinking, open differentials.
@@ -391,6 +455,9 @@ func _physics_process(delta: float) -> void:
 			driven += 1
 	var per := force / maxf(driven, 1.0)
 	var max_sink := radius * 0.6
+	var deep := 0.0
+	if trailer:
+		trailer.brake_all(brake_v * 0.4 + (brake_max * 0.6 if hb else 0.0))
 	var sink_sum := 0.0
 	var mud_sum := 0.0
 	for i in wheels.size():
@@ -403,16 +470,23 @@ func _physics_process(delta: float) -> void:
 		var mud := terrain.mud_at(wp.x, wp.z) if terrain else 0.0
 		var rut := tracks.rut_at(wp.x, wp.z) if tracks else 0.0
 		var slip := 1.0 - w.get_skidinfo() if w.is_in_contact() else 0.0
-		var target := clampf(mud * 0.85 + rut * 0.35 * mud, 0.0, 1.0) * max_sink * float(CarSpecs.TYRE_SINK.get(_tyres, 1.0)) * (0.45 + slip * 0.9)
+		# Deep mud swallows more of the wheel; spinning digs it in further.
+		var wheel_sink := w.wheel_radius * (0.55 + 0.35 * mud)
+		var target := clampf(mud * 0.85 + rut * 0.35 * mud, 0.0, 1.0) * wheel_sink * float(CarSpecs.TYRE_SINK.get(_tyres, 1.0)) * (0.45 + slip * 0.9)
+		deep = maxf(deep, mud)
 		var rate := 0.18 if target > _sinks[i] else (0.25 if mud > 0.05 else 1.2)
 		_sinks[i] = move_toward(_sinks[i], target, rate * delta)
 		w.wheel_rest_length = maxf(0.05, _base_rest - _sinks[i])
+		# The tyre itself sits down into the mud.
+		var vis := w.get_child(0) as Node3D
+		if vis:
+			vis.position.y = -_sinks[i] * 0.9
 		sink_sum += _sinks[i] / max_sink
 		mud_sum += mud
 		w.engine_force = per if w.use_as_traction else 0.0
 		w.brake = brake_v
 		if tracks and w.is_in_contact():
-			tracks.add_point(i + get_instance_id() * 16, wp - Vector3.UP * radius * 0.97, float((spec["wheel"] as Dictionary)["width"]), sf, mud)
+			tracks.add_point(i + get_instance_id() * 16, wp - Vector3.UP * w.wheel_radius * 0.97, float((spec["wheel"] as Dictionary)["width"]), sf, mud)
 	if not diff_locked:
 		# Open diff: an axle only pushes as hard as its weakest wheel allows.
 		var axles: Array = spec["axles"]
@@ -440,6 +514,7 @@ func _physics_process(delta: float) -> void:
 		apply_central_force(-hv.normalized() * minf(hv.length(), 2.0) / 2.0 * mass * 9.8 * mud_avg * (0.05 + sink * 0.6) * small)
 	var cda: float = _dt["cda"]
 	apply_central_force(-linear_velocity * speed * cda * 0.6)
+	_static_grip(delta, gas, brk, hb, grip_table)
 
 	var top: float = spec["top_speed"]
 	var steer_max: float = spec["steer_max"] * (0.7 if diff_locked else 1.0)
@@ -486,6 +561,8 @@ func _physics_process(delta: float) -> void:
 	_dust.initial_velocity_max = 1.0 + speed * 0.15
 	_exhaust.emitting = engine_on and gas > 0.25 and engine_rpm > idle * 1.2
 	_splash.emitting = in_water and speed > 1.5
+	_mud_spray.emitting = mud_avg > 0.2 and grounded and (skid > 0.15 or (gas > 0.3 and speed > 1.0))
+	_mud_spray.initial_velocity_max = 3.0 + skid * 6.0
 	if in_water:
 		apply_central_force(-linear_velocity * mass * 0.5)
 
@@ -494,6 +571,10 @@ func _physics_process(delta: float) -> void:
 		_flip_t += delta
 	else:
 		_flip_t = 0.0
+	if _flip_t > 0.6 and not load.is_empty():
+		spilled.emit(global_position, load.duplicate())
+		set_load([])
+		message.emit("You lost your cargo! A crane truck can pick it up")
 	if _flip_t > 2.0:
 		reset_car(false)
 		return
@@ -509,11 +590,40 @@ func _physics_process(delta: float) -> void:
 		trip += Vector2(linear_velocity.x, linear_velocity.z).length() * delta
 
 
+## Godot's raycast tyres hardly resist creeping sideways when slow, so vehicles slid down
+## sideslopes. Real tyres hold until gravity beats their grip: add that static friction here.
+func _static_grip(delta: float, gas: float, brk: float, hb: bool, grip_table: Array) -> void:
+	var touching := 0
+	for w in wheels:
+		if w.is_in_contact():
+			touching += 1
+	if touching < wheels.size() / 2 + 1:
+		return
+	var b := global_transform.basis
+	var g := get_gravity()
+	var mu := 0.85 * float(grip_table[surface]) * lerpf(1.0, 0.5, clampf(sink * 1.5, 0.0, 1.0))
+	var normal := mass * g.length() * maxf(b.y.dot(Vector3.UP), 0.0)
+	var limit := mu * normal
+	# Sideways: cancel gravity's pull across the slope and damp the slide.
+	var side := b.x
+	var lat_v := linear_velocity.dot(side)
+	var want := -g.dot(side) * mass - lat_v * mass / maxf(delta * 6.0, 0.02)
+	if absf(lat_v) < 2.5:
+		apply_central_force(side * clampf(want, -limit, limit))
+	# Along the slope: hold still when parked or stopped with no pedals pressed.
+	var fwd := b.z
+	var lon_v := linear_velocity.dot(fwd)
+	var holding := hb or (gas < 0.05 and absf(lon_v) < 0.6)
+	if holding and absf(lon_v) < 2.0:
+		var want_l := -g.dot(fwd) * mass - lon_v * mass / maxf(delta * 6.0, 0.02)
+		apply_central_force(fwd * clampf(want_l, -limit, limit))
+
+
 func _physics_fuel_water_dirt(delta: float, speed: float, mud_avg: float) -> void:
 	if engine_on:
 		var burn: float = spec["burn"]
 		var mult := (1.2 if awd_on and spec["awd"] == "switchable" else 1.0) * (1.1 if diff_locked else 1.0)
-		fuel = maxf(0.0, fuel - (burn * 0.08 + burn * throttle * (0.4 + rpm * 0.6)) * mult * delta)
+		fuel = maxf(0.0, fuel - (burn * 0.08 + burn * throttle * (0.3 + rpm * 0.7)) * mult * delta)
 		if fuel <= 0.0:
 			engine_on = false
 			message.emit("Out of fuel! Press R to call a tow to the garage")
@@ -674,8 +784,47 @@ func tow_home() -> void:
 	message.emit("Towed back to the garage")
 
 
+## The bed that takes cargo: the trailer if there is one, else this vehicle.
+func carrier() -> Object:
+	if trailer:
+		return trailer
+	return self if int(Cargo.bed(spec).get("slots", 0)) > 0 else null
+
+
+func carrier_spec() -> Dictionary:
+	return trailer.spec if trailer else spec
+
+
+func carrier_load() -> Array:
+	return trailer.load if trailer else load
+
+
+func set_carrier_load(l: Array) -> void:
+	if trailer:
+		trailer.set_load(l)
+	else:
+		set_load(l)
+
+
+func set_load(l: Array) -> void:
+	load = l
+	if cargo_holder:
+		Cargo.show(cargo_holder, spec, load)
+	var extra := Cargo.load_mass(load)
+	mass = _base_mass + extra
+	var bed_y: float = (Cargo.bed(spec).get("start", Vector3.ZERO) as Vector3).y
+	center_of_mass = _base_com + Vector3(0, (bed_y + 0.5 - _base_com.y) * extra / mass, 0)
+
+
 func _teleport(t: Transform3D) -> void:
 	var rid := get_rid()
+	if trailer:
+		var off := (spec["hitch"] as Vector3) - ((trailer.spec["hitch"]) as Vector3)
+		var tt := Transform3D(t.basis, t * off)
+		var trid := trailer.get_rid()
+		PhysicsServer3D.body_set_state(trid, PhysicsServer3D.BODY_STATE_TRANSFORM, tt)
+		PhysicsServer3D.body_set_state(trid, PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY, Vector3.ZERO)
+		PhysicsServer3D.body_set_state(trid, PhysicsServer3D.BODY_STATE_ANGULAR_VELOCITY, Vector3.ZERO)
 	PhysicsServer3D.body_set_state(rid, PhysicsServer3D.BODY_STATE_TRANSFORM, t)
 	PhysicsServer3D.body_set_state(rid, PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY, Vector3.ZERO)
 	PhysicsServer3D.body_set_state(rid, PhysicsServer3D.BODY_STATE_ANGULAR_VELOCITY, Vector3.ZERO)
@@ -712,11 +861,11 @@ func _update_lamps() -> void:
 	for m in lamp_mats["light"]:
 		(m as StandardMaterial3D).emission_energy_multiplier = [0.15, 2.2, 3.5][lights_mode]
 	for m in lamp_mats["tail"]:
-		(m as StandardMaterial3D).emission_energy_multiplier = 2.8 if braking else (0.9 if lights_mode > 0 else 0.15)
+		(m as StandardMaterial3D).emission_energy_multiplier = 1.6 if braking else (0.6 if lights_mode > 0 else 0.1)
 	for m in lamp_mats["reverse"]:
 		(m as StandardMaterial3D).emission_energy_multiplier = 2.5 if gear < 0 and engine_on else 0.1
 	for m in lamp_mats["amber"]:
-		(m as StandardMaterial3D).emission_energy_multiplier = 3.0 if blink else 0.1
+		(m as StandardMaterial3D).emission_energy_multiplier = 1.8 if blink else 0.1
 
 
 func _make_exhaust() -> void:

@@ -19,6 +19,8 @@ var _ip_edit: LineEdit
 var _status: Label
 var _settings: Control
 var _busy := false
+var _ui_root: Control
+var _notice_card: Control
 
 
 func _ready() -> void:
@@ -36,6 +38,9 @@ func _ready() -> void:
 	if not Updater.latest.is_empty():
 		_on_update(Updater.latest)
 	Updater.check()
+	var news := Updater.whats_new()
+	if news != "":
+		_notice("star", "What's new in %s" % Net.version(), news, "", Callable())
 	Net.joined.connect(_on_joined)
 	if GameState.shot_mode:
 		_shot()
@@ -102,6 +107,7 @@ func _build_ui() -> void:
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.theme = GameState.ui_theme()
 	ui.add_child(root)
+	_ui_root = root
 
 	# Left: the car.
 	var panel := PanelContainer.new()
@@ -304,11 +310,16 @@ func _show_car() -> void:
 	var span: float = float(spec["axles"][0]["z"]) - float(spec["axles"][-1]["z"])
 	_turntable.scale = Vector3.ONE * clampf(3.0 / (span + 1.0), 0.45, 1.0)
 	_tyre_btn.text = "Tyres: %s" % CarSpecs.TYRE_NAMES[garage["tyres"]]
-	_snorkel.visible = spec.has("snorkel_parts")
+	_snorkel.visible = spec.has("snorkel_parts") and bool(garage["has_snorkel"])
+	var owned := GameState.owns(id)
+	_solo_btn.disabled = not owned
+	_solo_btn.text = "Drive solo" if owned else "Locked: $%d, level %d" % [int(spec.get("price", 0)), int(spec.get("level", 1))]
+	if not owned:
+		_status.text = "Buy it at the garage in the game (press T at the garage)"
 	_snorkel.set_pressed_no_signal(bool(garage["snorkel"]))
 	_turntable.add_child(_car_vis)
 	_name_lbl.text = str(spec["name"])
-	_blurb.text = str(spec["blurb"])
+	_blurb.text = "%s\nInspired by the %s." % [spec["blurb"], spec.get("inspired", "")]
 	for c in _stats_box.get_children():
 		c.queue_free()
 	var stats: Dictionary = spec["stats"]
@@ -347,7 +358,11 @@ static func _driven(spec: Dictionary) -> int:
 func _cycle_tyres() -> void:
 	var id := GameState.car_id
 	var cur := str(GameState.garage_for(id)["tyres"])
-	var nxt: String = CarSpecs.TYRES[(CarSpecs.TYRES.find(cur) + 1) % CarSpecs.TYRES.size()]
+	var owned: Array = GameState.garage_for(id)["owned_tyres"]
+	if owned.size() < 2:
+		_status.text = "Buy more tyre types in the garage (in the game, press T at the garage)"
+		return
+	var nxt: String = owned[(owned.find(cur) + 1) % owned.size()]
 	GameState.set_garage(id, "tyres", nxt)
 	_show_car()
 
@@ -410,15 +425,65 @@ func _on_status(text: String) -> void:
 
 
 func _on_update(v: String) -> void:
-	var b := Button.new()
-	b.text = "Update to %s" % v
-	b.theme_type_variation = "PrimaryButton"
-	b.pressed.connect(func() -> void:
-		b.disabled = true
-		Updater.install())
-	_status.get_parent().add_child(b)
-	_status.get_parent().move_child(b, 0)
-	_status.text = "A new version is out: %s (you have %s)" % [v, Net.version()]
+	_notice("system_update" if ResourceLoader.exists("res://assets/icons/system_update.svg") else "upgrade",
+		"Version %s is out" % v,
+		"%s\n%s" % ["Download: %.0f MB" % (Updater.size_bytes / 1048576.0) if Updater.size_bytes > 0 else "", Updater.notes],
+		"Install now", func(btn: Button, bar: ProgressBar) -> void:
+			btn.disabled = true
+			btn.text = "Downloading..."
+			bar.visible = true
+			Updater.download_ratio.connect(func(r: float) -> void: bar.value = r)
+			Updater.install())
+
+
+func _notice(icon: String, title: String, body: String, action: String, cb: Callable) -> void:
+	if _notice_card:
+		_notice_card.queue_free()
+	var card := PanelContainer.new()
+	card.anchor_left = 1.0
+	card.anchor_right = 1.0
+	card.offset_right = -32
+	card.offset_top = 28
+	card.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	card.custom_minimum_size = Vector2(470, 0)
+	card.theme = GameState.ui_theme()
+	_ui_root.add_child(card)
+	_notice_card = card
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	card.add_child(v)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 10)
+	v.add_child(head)
+	head.add_child(Icons.rect(icon, 30, GameState.DARK))
+	var t := Label.new()
+	t.text = title
+	t.label_settings = GameState.label_settings(28, true)
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(t)
+	var x := Button.new()
+	x.icon = Icons.tex("close", 48)
+	x.flat = true
+	x.pressed.connect(card.queue_free)
+	head.add_child(x)
+	var b := Label.new()
+	b.text = body.strip_edges()
+	b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	b.custom_minimum_size = Vector2(420, 0)
+	b.label_settings = GameState.label_settings(19, true, GameState.MUTED)
+	v.add_child(b)
+	var bar := ProgressBar.new()
+	bar.min_value = 0.0
+	bar.max_value = 1.0
+	bar.show_percentage = true
+	bar.visible = false
+	v.add_child(bar)
+	if action != "":
+		var btn := Button.new()
+		btn.text = action
+		btn.theme_type_variation = "PrimaryButton"
+		btn.pressed.connect(func() -> void: cb.call(btn, bar))
+		v.add_child(btn)
 
 
 func _on_joined() -> void:

@@ -5,6 +5,7 @@ render_mode cull_disabled;
 
 uniform sampler2D splat : filter_linear, repeat_disable;
 uniform sampler2D mud_map : filter_linear, repeat_disable;
+uniform sampler2D rut_map : filter_linear, repeat_disable;
 uniform sampler2DArray albedo_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2DArray normal_tex : filter_linear_mipmap, repeat_enable;
 uniform sampler2D macro : filter_linear, repeat_enable;
@@ -16,7 +17,15 @@ varying vec3 world_pos;
 const float TILE = 0.28;
 const float ROUGH[7] = float[](0.95, 0.9, 0.88, 0.82, 0.6, 0.95, 0.35);
 
+varying float rut;
+
 void vertex() {
+	vec3 wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	vec2 m_uv = (wp.xz + map_half) / (2.0 * map_half);
+	// Ruts: wheels dig the mud down (up to half a metre) where they have passed.
+	float soft = smoothstep(0.1, 0.5, texture(mud_map, m_uv).r);
+	rut = texture(rut_map, m_uv).r * soft;
+	VERTEX.y -= rut * 0.5;
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }
 
@@ -52,8 +61,9 @@ void fragment() {
 	float m = texture(macro, world_pos.xz * 0.004).r;
 	col *= mix(0.82, 1.12, m);
 	col *= mix(1.0, 0.62, mud);
+	col *= 1.0 - rut * 0.3;
 	ALBEDO = col;
-	ROUGHNESS = rough;
+	ROUGHNESS = mix(rough, 0.2, rut);
 	SPECULAR = 0.3;
 	if (use_normals) {
 		NORMAL_MAP = nm;

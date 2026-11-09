@@ -9,10 +9,17 @@ const STEP := 0.45
 var _strips: Dictionary = {}  ## key -> {pts: Array, cols: Array, w: float, last: Vector3}
 var _ruts: Dictionary = {}    ## Vector2i (1 m cell) -> 0..1
 var _dirty := false
+## Rut depth per terrain cell (2 m), fed to the terrain shader to dig the ground down.
+var rut_img: Image
+var rut_tex: ImageTexture
+var _rut_dirty := false
+var _rut_t := 0.0
 var _t := 0.0
 
 
 func _ready() -> void:
+	rut_img = Image.create(Terrain.N, Terrain.N, false, Image.FORMAT_R8)
+	rut_tex = ImageTexture.create_from_image(rut_img)
 	top_level = true
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
@@ -58,6 +65,12 @@ func add_point(key: int, pos: Vector3, width: float, surface: int, mud: float) -
 	if mud > 0.05:
 		var cell := Vector2i(int(floor(pos.x)), int(floor(pos.z)))
 		_ruts[cell] = minf(1.0, float(_ruts.get(cell, 0.0)) + 0.06 * mud)
+		var px := clampi(int((pos.x + Terrain.HALF) / Terrain.CELL), 0, Terrain.N - 1)
+		var pz := clampi(int((pos.z + Terrain.HALF) / Terrain.CELL), 0, Terrain.N - 1)
+		var v := rut_img.get_pixel(px, pz).r
+		if v < 1.0:
+			rut_img.set_pixel(px, pz, Color(minf(1.0, v + 0.05 * mud), 0, 0))
+			_rut_dirty = true
 	_dirty = true
 
 
@@ -66,6 +79,11 @@ func rut_at(x: float, z: float) -> float:
 
 
 func _process(delta: float) -> void:
+	_rut_t += delta
+	if _rut_dirty and _rut_t > 0.3:
+		_rut_t = 0.0
+		_rut_dirty = false
+		rut_tex.update(rut_img)
 	_t += delta
 	if not _dirty or _t < 0.2:
 		return

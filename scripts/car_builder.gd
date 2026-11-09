@@ -62,7 +62,9 @@ static func _material(key: String, colors: Dictionary, mats: Dictionary, paint_m
 			if key == "reverse":
 				c = Color("#f4f4f0")
 			elif key == "amber":
-				c = Color("#ffb347")
+				c = Color("#ff9a1f")
+			elif key == "tail":
+				c = Color("#e0201c")
 			var e := StandardMaterial3D.new()
 			e.albedo_color = c.darkened(0.25)
 			e.emission_enabled = true
@@ -115,10 +117,10 @@ static func _part(p: Array, colors: Dictionary, mats: Dictionary, paint_mats: Ar
 	return mi
 
 
-static func build_wheel_visual(spec: Dictionary, garage := {}) -> Node3D:
+static func build_wheel_visual(spec: Dictionary, garage := {}, radius := -1.0) -> Node3D:
 	var w: Dictionary = spec["wheel"]
 	var colors: Dictionary = spec["colors"]
-	var r: float = w["radius"]
+	var r: float = radius if radius > 0.0 else float(w["radius"])
 	var width: float = w["width"]
 	var tyres := str(garage.get("tyres", spec.get("tyres", "allroad")))
 	var lugs: int = int(w.get("lugs", 16)) + (8 if tyres == "mud" else 0) - (6 if tyres == "highway" else 0)
@@ -152,14 +154,18 @@ static func build_wheel_visual(spec: Dictionary, garage := {}) -> Node3D:
 ## Two wheels per axle: [+x, -x] for each axle, front to back.
 static func wheel_positions(spec: Dictionary) -> Array:
 	var w: Dictionary = spec["wheel"]
-	var x: float = w["x"]
-	var y: float = w["y"]
 	var out: Array = []
 	for a in spec["axles"]:
+		var x: float = a.get("x", w["x"])
+		var y: float = a.get("y", w["y"])
 		var z: float = a["z"]
 		out.append(Vector3(x, y, z))
 		out.append(Vector3(-x, y, z))
 	return out
+
+
+static func axle_radius(spec: Dictionary, axle: int) -> float:
+	return float((spec["axles"][axle] as Dictionary).get("radius", spec["wheel"]["radius"]))
 
 
 ## A static model sitting on y = 0, for the menu turntable.
@@ -172,12 +178,53 @@ static func build_display(spec: Dictionary, garage := {}) -> Node3D:
 	var n_wheels := (spec["axles"] as Array).size() * 2
 	var sag := 9.8 / (n_wheels * float(w["stiffness"]))
 	var drop: float = float(w["rest"]) - sag
-	for p in wheel_positions(spec):
-		var wv := build_wheel_visual(spec, garage)
-		wv.position = p - Vector3(0, drop, 0)
+	var pos := wheel_positions(spec)
+	for i in pos.size():
+		var wv := build_wheel_visual(spec, garage, axle_radius(spec, i / 2))
+		wv.position = (pos[i] as Vector3) - Vector3(0, drop, 0)
 		car.add_child(wv)
-	car.position.y = float(w["radius"]) - (float(w["y"]) - drop)
+	car.position.y = axle_radius(spec, 0) - ((pos[0] as Vector3).y - drop)
 	return root
+
+
+static func build_trailer(spec: Dictionary) -> Trailer:
+	var w: Dictionary = spec["wheel"]
+	var t := Trailer.new()
+	t.name = "Trailer"
+	t.spec = spec
+	t.base_mass = spec["mass"]
+	t.mass = spec["mass"]
+	t.collision_layer = 2
+	t.collision_mask = 1 | 2 | 4
+	t.can_sleep = false
+	for c in spec["collision"]:
+		var cs := CollisionShape3D.new()
+		var box := BoxShape3D.new()
+		box.size = c[0]
+		cs.shape = box
+		cs.position = c[1]
+		t.add_child(cs)
+	t.add_child(build_visual(spec))
+	var positions := wheel_positions(spec)
+	for i in positions.size():
+		var wheel := VehicleWheel3D.new()
+		wheel.position = positions[i]
+		wheel.wheel_radius = w["radius"]
+		wheel.wheel_rest_length = w["rest"]
+		wheel.suspension_travel = w["travel"]
+		wheel.suspension_stiffness = w["stiffness"]
+		wheel.suspension_max_force = float(spec["mass"]) * 80.0
+		wheel.damping_compression = w["comp"]
+		wheel.damping_relaxation = w["relax"]
+		wheel.wheel_friction_slip = w["slip"]
+		wheel.wheel_roll_influence = w["roll"]
+		wheel.add_child(build_wheel_visual(spec))
+		t.add_child(wheel)
+	var holder := Node3D.new()
+	holder.name = "Cargo"
+	t.add_child(holder)
+	t.holder = holder
+	return t
 
 
 static func build_vehicle(spec: Dictionary, garage := {}) -> Car:
@@ -216,7 +263,7 @@ static func build_vehicle(spec: Dictionary, garage := {}) -> Car:
 		var wheel := VehicleWheel3D.new()
 		wheel.name = "Wheel%d%s" % [i / 2, names[i % 2]]
 		wheel.position = positions[i]
-		wheel.wheel_radius = w["radius"]
+		wheel.wheel_radius = axle_radius(spec, i / 2)
 		wheel.wheel_rest_length = w["rest"]
 		wheel.suspension_travel = w["travel"]
 		wheel.suspension_stiffness = w["stiffness"]
@@ -228,8 +275,12 @@ static func build_vehicle(spec: Dictionary, garage := {}) -> Car:
 		wheel.use_as_steering = bool(axle["steer"])
 		wheel.use_as_traction = bool(axle["drive"])
 		wheel.set_meta("axle", i / 2)
-		wheel.add_child(build_wheel_visual(spec, garage))
+		wheel.add_child(build_wheel_visual(spec, garage, axle_radius(spec, i / 2)))
 		car.add_child(wheel)
+	var holder := Node3D.new()
+	holder.name = "Cargo"
+	car.add_child(holder)
+	car.cargo_holder = holder
 	var front_z: float = (axles[0] as Dictionary)["z"]
 	var top := _top(spec)
 	for side in [0.0]:

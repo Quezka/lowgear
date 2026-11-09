@@ -45,6 +45,14 @@ func _draw() -> void:
 	draw_line(Vector2(size.x * 0.5, 2), Vector2(size.x * 0.5, 10), cream, 3.0)
 	if not feats:
 		return
+	if GameState.waypoint != Vector3.INF:
+		var dw := GameState.waypoint - cam.global_position
+		var xw := _x(atan2(dw.x, -dw.z), heading)
+		if xw >= 0.0:
+			draw_texture_rect(Icons.tex("person_pin_circle", 48), Rect2(xw - 14, 2, 28, 28), false, Color("#8ecae6"))
+			var tw := "%d m" % int(Vector2(dw.x, dw.z).length())
+			draw_string_outline(font, Vector2(xw - 50, h + 30), tw, HORIZONTAL_ALIGNMENT_CENTER, 100, 22, 8, dark)
+			draw_string(font, Vector2(xw - 50, h + 30), tw, HORIZONTAL_ALIGNMENT_CENTER, 100, 22, Color("#8ecae6"))
 	var label_lm: Dictionary = {}
 	var label_diff := 0.22
 	for lm in feats.landmarks:
